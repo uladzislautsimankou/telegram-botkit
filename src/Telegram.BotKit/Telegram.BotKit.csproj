@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Title>Telegram BotKit Framework</Title>
+    <Description>CQRS-style framework for Telegram Bots</Description>
+    <PackageId>Telegram.BotKit</PackageId>
+
+    <Version>1.0.0</Version>
+    <Authors>Uladzislau Tsimankou</Authors>
+
+    <RepositoryUrl>https://github.com/uladzislautsimankou/telegram-botkit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Telegram.Bot" Version="22.8.1" />
+  </ItemGroup>
+</Project>
