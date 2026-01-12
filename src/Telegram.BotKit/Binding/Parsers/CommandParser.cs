@@ -4,8 +4,11 @@ namespace Telegram.BotKit.Binding.Parsers;
 
 internal static class CommandParser
 {
-    // ищем либо (что-то в кавычках), либо (любые символы кроме пробелов)
-    private static readonly Regex ArgsRegex = new(@"\""([^\""]*)\""|(\S+)", RegexOptions.Compiled);
+    // Regex explanation:
+    // ([^\s=]+)="([^"]*)"  именованный с кавычками key="val val"   Group[1] = key, Group[2] = val val)
+    // "([^"]*)"            позиционный с кавычками "val val"       Group[3] = val val)
+    // (\S+)                обычный параметр val или key=val        Group[4] (или Value)
+    private static readonly Regex ArgsRegex = new(@"([^\s=]+)=""([^""]*)""|""([^""]*)""|(\S+)",RegexOptions.Compiled);
 
     // без параметров                                           /command
     // с параметрами                                            /command param1 paramN
@@ -50,14 +53,17 @@ internal static class CommandParser
         if (string.IsNullOrWhiteSpace(rawArgs))
             return new();
 
-        // Match.Groups[1] - это то, что внутри кавычек (без самих кавычек)
-        // Match.Groups[2] - это обычное слово
-        // Value - это всё совпадение целиком (с кавычками)
         return ArgsRegex.Matches(rawArgs)
             .Select(m =>
             {
-                // Если сработала первая группа (кавычки) - берем её содержимое
-                if (m.Groups[1].Success) return m.Groups[1].Value;
+                // если key="val val"
+                // вырезаем из кавычек и склеиваем обратно в key=val val
+                if (m.Groups[1].Success)
+                    return $"{m.Groups[1].Value}={m.Groups[2].Value}";
+
+                // если просто кавычки
+                if (m.Groups[3].Success)
+                    return m.Groups[3].Value;
 
                 // Иначе берем просто слово
                 return m.Value;
