@@ -7,17 +7,26 @@
 
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Title>Telegram BotKit Framework</Title>
-    <Description>CQRS-style framework for Telegram Bots</Description>
+    <Description>Modern, structured .NET Framework for building Telegram Bots with Handler-based pipeline and smart parameter binding.</Description>
     <PackageId>Telegram.BotKit</PackageId>
 
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Uladzislau Tsimankou</Authors>
 
     <RepositoryUrl>https://github.com/uladzislautsimankou/telegram-botkit</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/uladzislautsimankou/telegram-botkit</PackageProjectUrl>
 
+    <PackageTags>telegram;bot;framework;mediator;handlers;middleware;</PackageTags>
+
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+    <None Include="..\..\LICENSE.txt" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
