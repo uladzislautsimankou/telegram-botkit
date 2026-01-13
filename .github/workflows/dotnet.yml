@@ -48,3 +48,12 @@ jobs:
           --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json \
           --api-key ${{ secrets.GITHUB_TOKEN }} \
           --skip-duplicate
+          
+      # публикуем в NuGet
+    - name: Publish to NuGet.org
+      if: github.event_name == 'push'
+      run: |
+        dotnet nuget push ./nupkgs/*.nupkg \
+          --source https://api.nuget.org/v3/index.json \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --skip-duplicate
