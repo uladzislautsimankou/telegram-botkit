@@ -1,12 +1,12 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
+using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Attributes;
-using Telegram.BotKit.Binding.Converters;
 using Telegram.BotKit.Exceptions;
 
 namespace Telegram.BotKit.Binding.Binders;
 
-internal sealed class CommandParameterBinder : ICommandParameterBinder
+internal sealed class CommandParameterBinder(IEnumerable<IValueConverter> converters) : ICommandParameterBinder
 {
     // кэш, что бы каждый раз не дергать рефлексию на кадждую комманду
     private static readonly ConcurrentDictionary<Type, List<ParamMetadata>> _cache = new();
@@ -36,7 +36,7 @@ internal sealed class CommandParameterBinder : ICommandParameterBinder
 
             try
             {
-                var value = ValueConverter.Convert(rawValue, meta.PropertyType);
+                var value = ConvertValue(rawValue, meta.PropertyType);
                 meta.PropertyInfo.SetValue(instance, value);
             }
             catch (Exception)
@@ -104,5 +104,20 @@ internal sealed class CommandParameterBinder : ICommandParameterBinder
             .Where(x => x.Attr is not null)
             .Select(x => new ParamMetadata(x.Prop, x.Attr!))
             .ToList();
+    }
+
+    private object? ConvertValue(string? input, Type type)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+
+        foreach (var converter in converters.Reverse())
+        {
+            if (converter.TryConvert(input, type, out var result))
+            {
+                return result;
+            }
+        }
+
+        throw new NotSupportedException($"No converter found for type {type.Name}");
     }
 }

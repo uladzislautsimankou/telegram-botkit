@@ -1,5 +1,4 @@
-﻿using Telegram.BotKit.Binding.Converters;
-using Telegram.BotKit.Tests.Shared;
+﻿using Telegram.BotKit.Tests.Shared;
 
 namespace Telegram.BotKit.Tests.Binding.Converters;
 
@@ -11,7 +10,9 @@ public partial class ValueConverterTests
     [InlineData("1", TestEnum.First)]
     public void Convert_ShouldParseEnum_ValidValues(string input, object expected)
     {
-        var result = ValueConverter.Convert(input, typeof(TestEnum));
+        var success = _converter.TryConvert(input, typeof(TestEnum), out var result);
+
+        Assert.True(success);
         Assert.Equal(expected, result);
     }
 
@@ -20,7 +21,7 @@ public partial class ValueConverterTests
     {
         Assert.Throws<FormatException>(() =>
         {
-            ValueConverter.Convert("99", typeof(TestEnum));
+            _converter.TryConvert("99", typeof(TestEnum), out _);
         });
     }
 
@@ -29,7 +30,7 @@ public partial class ValueConverterTests
     {
         Assert.Throws<FormatException>(() =>
         {
-            ValueConverter.Convert("invalid_text", typeof(TestEnum?));
+            _converter.TryConvert("invalid_text", typeof(TestEnum?), out _);
         });
     }
 }

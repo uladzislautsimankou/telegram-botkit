@@ -6,6 +6,7 @@ using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Binding.Binders;
+using Telegram.BotKit.Binding.Converters;
 using Telegram.BotKit.Configuration;
 using Telegram.BotKit.Hosting;
 using Telegram.BotKit.Pipeline.Dispatchers;
@@ -39,6 +40,8 @@ internal static class ServicesRegistrationExtention
 
         services.AddTransient<CommandRoutingMiddleware>();
         services.AddTransient<CallbackRoutingMiddleware>();
+
+        services.TryAddEnumerable(ServiceDescriptor.Transient<IValueConverter, DefaultValueConverter>());
 
         services.AddTransient<ICallbackParameterBinder, CallbackParameterBinder>();
         services.AddTransient<ICommandParameterBinder, CommandParameterBinder>();

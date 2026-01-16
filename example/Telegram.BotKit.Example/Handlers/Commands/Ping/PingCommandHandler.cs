@@ -16,6 +16,9 @@ internal record PingCommandParams
     // Named argument. Example: /ping c=5
     [CommandParam(Name = "c")]
     public int? Count { get; init; }
+
+    [CommandParam(Name = "d")]
+    public DateTime Date { get; init; }
 }
 
 internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCommandParams>
@@ -24,10 +27,12 @@ internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandl
 
     public async Task HandleAsync(PingCommandParams parameters, CommandContext context, CancellationToken cancellationToken = default)
     {
-        var responseText = 
+        var responseText =
             $"🏓 <b>Pong!</b>\n" +
             $"Message: {parameters.Message}\n" +
-            $"Count: {parameters.Count ?? 0}";
+            $"Count: {parameters.Count ?? 0}\n" +
+            $"Date: {parameters.Date.ToShortDateString()}";
+
 
         // Prepare parameters for the callback button
         // URL: ping:click?m=...&c=...

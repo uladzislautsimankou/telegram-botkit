@@ -1,9 +1,10 @@
 ﻿using System.ComponentModel;
 using System.Globalization;
+using Telegram.BotKit.Abstractions;
 
 namespace Telegram.BotKit.Binding.Converters;
 
-internal static class ValueConverter
+internal class DefaultValueConverter : IValueConverter
 {
     private static readonly string[] _dateFormats =
     [
@@ -14,25 +15,40 @@ internal static class ValueConverter
         "yyyy/MM/dd"  // Альтернативный ISO
     ];
 
-    public static object? Convert(string? input, Type targetType)
+    public bool TryConvert(string input, Type targetType, out object? result)
     {
-        if (string.IsNullOrWhiteSpace(input)) return null;
+        result = null;
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            if (IsNullable(targetType))
+            {
+                return true;
+            }
+
+            return false;
+        }
 
         // убираем nullable обертку (int? в int), чтобы TypeDescriptor сработал корректно
         var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
         // если нам нужна строка по итогу, то конвертация не нужна
-        if (actualType == typeof(string)) return input;
+        if (actualType == typeof(string))
+        {
+            result = input;
+            return true;
+        }
 
         if (actualType.IsEnum)
         {
             // пробуем распарсить и проверяем, что такое значение реально есть
-            if (!Enum.TryParse(actualType, input, true, out var result) || !Enum.IsDefined(actualType, result))
+            if (!Enum.TryParse(actualType, input, true, out var enumResult) || !Enum.IsDefined(actualType, enumResult))
             {
                 throw new FormatException($"Value '{input}' is not a valid member of enum '{actualType.Name}'.");
             }
 
-            return result;
+            result = enumResult;
+            return true;
         }
 
         if (actualType == typeof(DateTime))
@@ -43,7 +59,8 @@ internal static class ValueConverter
                 throw new FormatException($"String '{input}' was not recognized as a valid DateTime. Supported formats: {string.Join(", ", _dateFormats)}");
             }
 
-            return date;
+            result = date;
+            return true;
         }
 
         var converter = TypeDescriptor.GetConverter(actualType);
@@ -57,7 +74,8 @@ internal static class ValueConverter
                     input = input.Replace(',', '.');
                 }
 
-                return converter.ConvertFromInvariantString(input);
+                result = converter.ConvertFromInvariantString(input);
+                return true;
             }
             catch (Exception ex)
             {
@@ -65,9 +83,16 @@ internal static class ValueConverter
             }
         }
 
-        throw new NotSupportedException($"No type converter found for type '{actualType.Name}'.");
+        return false;
     }
 
     private static bool IsFloatingPoint(Type type) =>
         type == typeof(double) || type == typeof(float) || type == typeof(decimal);
+
+    private static bool IsNullable(Type type)
+    {
+        // !IsValueType = cсылочный тип (string, class) -> да
+        // Nullable.GetUnderlyingType != null = Nullable struct (int?) -> да
+        return !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
+    }
 }

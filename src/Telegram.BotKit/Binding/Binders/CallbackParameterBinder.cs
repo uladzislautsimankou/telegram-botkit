@@ -1,12 +1,12 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json.Serialization;
-using Telegram.BotKit.Binding.Converters;
+using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Exceptions;
 
 namespace Telegram.BotKit.Binding.Binders;
 
-internal sealed class CallbackParameterBinder : ICallbackParameterBinder
+internal sealed class CallbackParameterBinder(IEnumerable<IValueConverter> converters) : ICallbackParameterBinder
 {
     // кэш, что бы каждый раз не дергать рефлексию на кадждый коллбэк
     private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _cache = new();
@@ -26,7 +26,7 @@ internal sealed class CallbackParameterBinder : ICallbackParameterBinder
             {
                 try
                 {
-                    var value = ValueConverter.Convert(rawValue, prop.PropertyType);
+                    var value = ConvertValue(rawValue, prop.PropertyType);
                     prop.SetValue(instance, value);
                 }
                 catch (Exception)
@@ -63,5 +63,20 @@ internal sealed class CallbackParameterBinder : ICallbackParameterBinder
         }
 
         return map;
+    }
+
+    private object? ConvertValue(string? input, Type type)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+
+        foreach (var converter in converters.Reverse())
+        {
+            if (converter.TryConvert(input, type, out var result))
+            {
+                return result;
+            }
+        }
+
+        throw new NotSupportedException($"No converter found for type {type.Name}");
     }
 }

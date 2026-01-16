@@ -1,6 +1,8 @@
 ﻿using System.Text.Json.Serialization;
 using Telegram.Bot.Types;
+using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Binding.Binders;
+using Telegram.BotKit.Binding.Converters;
 using Telegram.BotKit.Exceptions;
 using Telegram.BotKit.Tests.Shared;
 
@@ -25,8 +27,6 @@ public class CallbackParameterBinderTests
         public DateTime? Date { get; init; }
     }
 
-    private readonly CallbackParameterBinder _binder = new();
-
     private CallbackContext CreateContext(string data)
     {
         var query = new CallbackQuery
@@ -37,6 +37,18 @@ public class CallbackParameterBinderTests
         };
 
         return new CallbackContext(query);
+    }
+
+    private readonly CallbackParameterBinder _binder;
+
+    public CallbackParameterBinderTests()
+    {
+        var converters = new List<IValueConverter>
+        {
+            new DefaultValueConverter()
+        };
+
+        _binder = new CallbackParameterBinder(converters);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Example.Converters;
 using Telegram.BotKit.Example.Middlewares;
 using Telegram.BotKit.Example.Services;
 using Telegram.BotKit.Extensions;
@@ -23,11 +24,16 @@ builder.Services.AddTransient<ICommandMiddleware, SimpleCommandLogMiddleware>();
 // but since we are using DI, the last registration wins for single services.
 builder.Services.AddTransient<ICommandErrorHandlerMiddleware, MyCustomCommandErrorHandler>();
 
-// 5. Override the Main Update Handler (Global logic)
+// 5. Registering a custom converter (Optional)
+// The Binder executes converters in REVERSE order of registration.
+// So, CustomDateConverter will run BEFORE the DefaultValueConverter.
+builder.Services.AddTransient<IValueConverter, CustomDateConverter>();
+
+// 6. Override the Main Update Handler (Global logic)
 // This enables GlobalUpdateHandler defined above.
 builder.Services.ReplaceUpdateHandler<GlobalUpdateHandler>();
 
-// 6. Build and Run
+// 7. Build and Run
 var app = builder.Build();
 
 await app.RunAsync();

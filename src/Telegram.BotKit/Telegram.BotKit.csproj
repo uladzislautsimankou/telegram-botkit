@@ -10,7 +10,7 @@
     <Description>Modern, structured .NET Framework for building Telegram Bots with Handler-based pipeline and smart parameter binding.</Description>
     <PackageId>Telegram.BotKit</PackageId>
 
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Uladzislau Tsimankou</Authors>
 
     <RepositoryUrl>https://github.com/uladzislautsimankou/telegram-botkit</RepositoryUrl>

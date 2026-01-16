@@ -1,6 +1,8 @@
 ﻿using Telegram.Bot.Types;
+using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Attributes;
 using Telegram.BotKit.Binding.Binders;
+using Telegram.BotKit.Binding.Converters;
 using Telegram.BotKit.Exceptions;
 using Telegram.BotKit.Tests.Shared;
 
@@ -29,8 +31,6 @@ public class CommandParameterBinderTests
         public bool IsActive { get; init; }
     }
 
-    private readonly CommandParameterBinder _binder = new();
-
     private CommandContext CreateContext(string fullText)
     {
         var msg = new Message
@@ -40,6 +40,18 @@ public class CommandParameterBinderTests
             Chat = new Chat { Id = 1 }
         };
         return new CommandContext(msg);
+    }
+
+    private readonly CommandParameterBinder _binder;
+
+    public CommandParameterBinderTests()
+    {
+        var converters = new List<IValueConverter>
+        {
+            new DefaultValueConverter()
+        };
+
+        _binder = new CommandParameterBinder(converters);
     }
 
     #region Позиции и имена
