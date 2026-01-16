@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="example/Telegram.BotKit.Example/Telegram.BotKit.Example.csproj" />
-  <Project Path="src/Telegram.BotKit/Telegram.BotKit.csproj" />
-  <Project Path="tests/Telegram.BotKit.Tests/Telegram.BotKit.Tests.csproj" />
+  <Project Path="Telegram.BotKit.Example/Telegram.BotKit.Example.csproj" />
+  <Project Path="Telegram.BotKit/Telegram.BotKit.csproj" />
+  <Project Path="Telegram.BotKit.Tests/Telegram.BotKit.Tests.csproj" />
 </Solution>

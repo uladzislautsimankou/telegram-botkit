@@ -33,12 +33,12 @@ jobs:
 
       # тесты
     - name: Test
-      run: dotnet test tests/Telegram.BotKit.Tests/Telegram.BotKit.Tests.csproj --no-build --configuration Release --verbosity normal
+      run: dotnet test Telegram.BotKit.Tests/Telegram.BotKit.Tests.csproj --no-build --configuration Release --verbosity normal
       
       # пакуем библиотеку
     - name: Pack
       if: github.event_name == 'push'
-      run: dotnet pack src/Telegram.BotKit/Telegram.BotKit.csproj --no-build --configuration Release --output ./nupkgs
+      run: dotnet pack Telegram.BotKit/Telegram.BotKit.csproj --no-build --configuration Release --output ./nupkgs
 
       # публикуем в GitHub Packages
     - name: Publish to GitHub Packages

@@ -41,4 +41,4 @@ graph TD
 
 ## 📦 Installation & Example
 
-A complete usage example with source code can be found in the [📂 Telegram.BotKit.Example](example/Telegram.BotKit.Example) directory.
+A complete usage example with source code can be found in the [📂 Telegram.BotKit.Example](Telegram.BotKit.Example) directory.
