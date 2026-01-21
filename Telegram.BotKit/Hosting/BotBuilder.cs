@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Telegram.BotKit.Configuration;
 using Telegram.BotKit.Extensions;
 using Telegram.BotKit.Hosting.Background;
@@ -34,6 +36,29 @@ public sealed class BotBuilder
     /// Gets information about the hosting environment (e.g., Development or Production).
     /// </summary>
     public IHostEnvironment Environment => _hostBuilder?.Environment ?? _webBuilder!.Environment;
+
+    /// <summary>
+    /// Gets the logging builder for configuring logging providers and filters.
+    /// </summary>
+    public ILoggingBuilder Logging => _hostBuilder?.Logging ?? _webBuilder!.Logging;
+
+    /// <summary>
+    /// Gets the metrics builder for configuring OpenTelemetry and other metrics.
+    /// </summary>
+    public IMetricsBuilder Metrics => _hostBuilder?.Metrics ?? _webBuilder!.Metrics;
+
+    /// <summary>
+    /// Gets the underlying <see cref="HostApplicationBuilder"/> if running in Polling mode.
+    /// Returns null if running in Webhook mode.
+    /// </summary>
+    public HostApplicationBuilder? HostBuilder => _hostBuilder;
+
+    /// <summary>
+    /// Gets the underlying <see cref="WebApplicationBuilder"/> if running in Webhook mode.
+    /// Returns null if running in Polling mode.
+    /// Use this to configure Kestrel, CORS, or other web-specific settings.
+    /// </summary>
+    public WebApplicationBuilder? WebApplicationBuilder => _webBuilder;
 
     internal BotBuilder(string[] args)
     {
