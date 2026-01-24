@@ -1,5 +1,7 @@
-﻿using Telegram.BotKit.Abstractions;
+﻿using Telegram.Bot.Types.Enums;
+using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.Helpers;
 using Telegram.BotKit.Invocation;
 
 namespace Telegram.BotKit.Pipeline.Middlewares;
@@ -12,6 +14,9 @@ internal sealed class CommandRoutingMiddleware(
     private readonly Dictionary<string, ICommandHandlerInvoker> _handlerMap
         = invokers.ToDictionary(x => x.Command, x => x, StringComparer.OrdinalIgnoreCase);
 
+    private readonly CommandSearcher _searcher = new CommandSearcher(invokers.Select(x => x.Command));
+
+
     public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrEmpty(context.TargetBotUsername)
@@ -23,8 +28,22 @@ internal sealed class CommandRoutingMiddleware(
 
         if (!_handlerMap.TryGetValue(context.Command, out var invoker))
         {
-            //комманду не нашли
-            throw new RouteNotFoundException(context.Command);
+            // ищем похожие команды
+            var similar = _searcher.FindSimilar(context.Command);
+
+            if (similar.Count > 0)
+            {
+                throw new CommandSuggestionsException(context.Command, similar);
+            }
+
+            // в приватных выбрасываем обычную ошибку
+            if (context.Message.Chat.Type == ChatType.Private)
+            {
+                throw new RouteNotFoundException(context.Command);
+            }
+            
+            // в остальных чатах игнорируем, вероятно не нам команда
+            return;
         }
 
         await invoker.InvokeAsync(context, cancellationToken);

@@ -42,6 +42,16 @@ internal sealed class DefaultCommandErrorHandler(
                 $"⚠️ Syntax error: {ex.Message}",
                 cancellationToken);
         }
+        catch (CommandSuggestionsException ex)
+        {
+            logger.LogDebug("Unknown command with suggestions: /{Command}, suggestions: {Suggestions}", 
+                ex.Command, string.Join(", ", ex.Suggestions));
+            
+            var suggestions = string.Join(", ", ex.Suggestions.Select(c => $"<code>/{c}</code>"));
+            await TrySendMessageAsync(context, 
+                $"🤷‍ Unknown command <code>/{ex.Command}</code>.\nDid you mean: {suggestions}?", 
+                cancellationToken);
+        }
         catch (RouteNotFoundException)
         {
             logger.LogDebug("Unknown command received: /{Command}", context.Command);
