@@ -10,6 +10,8 @@ internal sealed class CommandHandlerInvoker<TParams>(
 {
     public string Command => handler.Command;
 
+    public string[] Aliases => handler.Aliases;
+
     public async Task InvokeAsync(CommandContext context, CancellationToken cancellationToken = default)
     {
         var parameters = binder.Bind<TParams>(context);
