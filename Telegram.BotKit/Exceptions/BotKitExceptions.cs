@@ -31,6 +31,26 @@ public class RouteNotFoundException(string routeKey)
 }
 
 /// <summary>
+/// Thrown when a command is not found, but similar commands are available.
+/// This allows the handler to suggest similar commands to the user.
+/// </summary>
+/// <param name="command">The command that was not found.</param>
+/// <param name="suggestions">The list of similar command suggestions.</param>
+public class CommandSuggestionsException(string command, List<string> suggestions)
+    : BotKitException($"Unknown command '{command}'.")
+{
+    /// <summary>
+    /// Gets the command that was not found.
+    /// </summary>
+    public string Command { get; } = command;
+
+    /// <summary>
+    /// Gets the list of suggested similar commands.
+    /// </summary>
+    public List<string> Suggestions { get; } = suggestions;
+}
+
+/// <summary>
 /// Thrown when the raw input string cannot be parsed due to syntax errors.
 /// For example: unclosed quotation marks in a command argument or a malformed query string in callback data.
 /// </summary>
