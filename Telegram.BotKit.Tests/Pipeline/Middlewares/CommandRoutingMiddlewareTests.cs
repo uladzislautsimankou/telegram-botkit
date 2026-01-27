@@ -122,4 +122,75 @@ public partial class CommandRoutingMiddlewareTests
         Assert.False(_handler.WasExecuted);
         Assert.False(called);
     }
+
+    [Fact] // виртуальный роут успешно находит обработчик команды
+    public async Task Should_Execute_Command_When_VirtualRoute_Matches()
+    {
+        var binder = new MockCommandParameterBinder();
+        var invoker = new CommandHandlerInvoker<object>(_handler, binder);
+        var middleware = new CommandRoutingMiddleware([invoker], _botInfo);
+
+        var context = CreateCommandContext("play", ChatType.Private);
+        context.VirtualRoute = "bday_set"; // устанавливаем виртуальный маршрут
+
+        var called = false;
+        NextDelegate nextDelegate = async () => { called = true; await Task.CompletedTask; };
+
+        await middleware.InvokeAsync(context, nextDelegate);
+
+        Assert.True(_handler.WasExecuted);
+        Assert.False(called);
+    }
+
+    [Fact] // виртуальный роут имеет приоритет над оригинальной командой
+    public async Task Should_Prefer_VirtualRoute_Over_Original_Command()
+    {
+        var playHandler = new MockCommandHandler("play");
+        var bdayHandler = new MockCommandHandler("bday_set");
+
+        var playInvoker = new CommandHandlerInvoker<object>(playHandler, new MockCommandParameterBinder());
+        var bdayInvoker = new CommandHandlerInvoker<object>(bdayHandler, new MockCommandParameterBinder());
+
+        var middleware = new CommandRoutingMiddleware([playInvoker, bdayInvoker], _botInfo);
+
+        var context = CreateCommandContext("play", ChatType.Private);
+        context.VirtualRoute = "bday_set";
+
+        await middleware.InvokeAsync(context, () => Task.CompletedTask);
+
+        Assert.False(playHandler.WasExecuted, "play handler should not be executed");
+        Assert.True(bdayHandler.WasExecuted, "bday_set handler should be executed via virtual route");
+    }
+
+    [Fact] // виртуальный роут не найден - выбрасываем VirtualRouteNotFoundException
+    public async Task Should_Throw_VirtualRouteNotFoundException_When_VirtualRoute_Not_Found()
+    {
+        var binder = new MockCommandParameterBinder();
+        var invoker = new CommandHandlerInvoker<object>(_handler, binder);
+        var middleware = new CommandRoutingMiddleware([invoker], _botInfo);
+
+        var context = CreateCommandContext("play", ChatType.Private);
+        context.VirtualRoute = "non_existent_route";
+
+        var exception = await Assert.ThrowsAsync<VirtualRouteNotFoundException>(
+            () => middleware.InvokeAsync(context, () => Task.CompletedTask));
+
+        Assert.Equal("play", exception.Command);
+        Assert.Equal("non_existent_route", exception.VirtualRoute);
+    }
+
+    [Fact] // виртуальный роут работает с алиасами
+    public async Task Should_Execute_Alias_When_VirtualRoute_Matches_Alias()
+    {
+        var binder = new MockCommandParameterBinder();
+        var invoker = new CommandHandlerInvoker<object>(_handler, binder);
+        var middleware = new CommandRoutingMiddleware([invoker], _botInfo);
+
+        var context = CreateCommandContext("play", ChatType.Private);
+        context.VirtualRoute = "bday_create"; // виртуальный роут указывает на алиас
+
+        await middleware.InvokeAsync(context, () => Task.CompletedTask);
+
+        Assert.True(_handler.WasExecuted);
+    }
 }

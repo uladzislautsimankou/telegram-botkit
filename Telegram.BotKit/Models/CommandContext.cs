@@ -1,6 +1,7 @@
 ﻿using Telegram.Bot.Types;
 using Telegram.BotKit.Binding.Parsers;
 using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.Pipeline.Middlewares;
 
 namespace Telegram.BotKit;
 
@@ -52,4 +53,10 @@ public record CommandContext
     /// Gets the list of raw string arguments passed after the command.
     /// </summary>
     public List<string> RawParams { get; }
+
+    /// <summary>
+    /// Gets or sets a virtual route used for handler dispatching.
+    /// If set, the <see cref="CommandRoutingMiddleware"/> will use this value instead of <see cref="Command"/>.
+    /// </summary>
+    public string? VirtualRoute { get; set; }
 }
