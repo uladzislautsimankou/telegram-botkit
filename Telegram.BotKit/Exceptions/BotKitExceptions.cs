@@ -115,3 +115,23 @@ public class InvalidParameterTypeException(string parameterName, string? rawValu
 /// <param name="innerException">The inner exception that caused the startup failure (e.g., HttpRequestException).</param>
 public class BotStartupException(string message, Exception? innerException = null)
     : BotKitException(message, innerException);
+
+/// <summary>
+/// Thrown when the dispatcher cannot find a registered command handler for a dynamically assigned virtual route.
+/// This typically indicates an internal routing misconfiguration where a middleware redirected a valid command to a non-existent handler.
+/// </summary>
+/// <param name="originalCommand">The original command triggered by the user (e.g., "play").</param>
+/// <param name="virtualRoute">The virtual route key that could not be resolved (e.g., "game_rps").</param>
+public class VirtualRouteNotFoundException(string originalCommand, string virtualRoute)
+    : BotKitException($"Virtual route '{virtualRoute}' not found for command '{originalCommand}'.")
+{
+    /// <summary>
+    /// Gets the original command triggered by the user.
+    /// </summary>
+    public string Command { get; } = originalCommand;
+
+    /// <summary>
+    /// Gets the virtual route key that could not be resolved.
+    /// </summary>
+    public string VirtualRoute { get; } = virtualRoute;
+}

@@ -35,6 +35,8 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
 
     public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
+        var routeKey = context.VirtualRoute ?? context.Command;
+
         if (!string.IsNullOrEmpty(context.TargetBotUsername)
             && !context.TargetBotUsername.Equals(_botInfo.Username, StringComparison.OrdinalIgnoreCase))
         {
@@ -42,18 +44,25 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
             return;
         }
 
-        if (_handlerMap.TryGetValue(context.Command, out var invoker))
+        if (_handlerMap.TryGetValue(routeKey, out var invoker))
         {
             // все ок, нашли команду
             await invoker.InvokeAsync(context, cancellationToken);
             return;
         }
 
-        if (_aliasMap.TryGetValue(context.Command, out var invokerAlias))
+        if (_aliasMap.TryGetValue(routeKey, out var invokerAlias))
         {
             // не нашли команду, но нашли алиас
             await invokerAlias.InvokeAsync(context, cancellationToken);
             return;
+        }
+
+        // если роут виртуальный, значит его где-то присвоили, значит это команда для нас, но не найдена
+        // значит тут мы должны выбросить ошибку
+        if (context.VirtualRoute is not null)
+        {
+            throw new VirtualRouteNotFoundException(context.Command, context.VirtualRoute);
         }
 
         // ничего не нашли - ищем похожие команды
