@@ -12,6 +12,10 @@ public partial class CommandRoutingMiddlewareTests
         public string Username { get; } = username;
 
         public long Id { get; } = 123456789;
+
+        public string FirstName { get; } = "Test";
+
+        public string? LastName { get; } = "Test";
     }
 
     private class MockCommandHandler(string command, string[]? aliases = null) : ICommandHandler<object>

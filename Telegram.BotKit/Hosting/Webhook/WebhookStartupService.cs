@@ -19,7 +19,7 @@ internal sealed class WebhookStartupService(
         try
         {
             var me = await bot.GetMe(cancellationToken: cancellationToken);
-            botInfo.SetState(me.Username, me.Id);
+            botInfo.SetState(me.Username, me.Id, me.FirstName, me.LastName);
 
             logger.LogInformation("Bot identified: @{Username} (ID: {Id})", me.Username, me.Id);
 

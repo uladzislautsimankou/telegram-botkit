@@ -22,7 +22,7 @@ internal sealed class PollingService(
         {
             var me = await bot.GetMe(cancellationToken: stoppingToken);
 
-            botInfo.SetState(me.Username, me.Id);
+            botInfo.SetState(me.Username, me.Id, me.FirstName, me.LastName);
 
             logger.LogInformation("Bot started successfully: @{Username} (ID: {Id})", me.Username, me.Id);
         }

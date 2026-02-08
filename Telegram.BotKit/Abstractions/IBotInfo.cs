@@ -15,4 +15,15 @@ public interface IBotInfo
     /// Gets the unique identifier (ID) of the bot.
     /// </summary>
     long Id { get; }
+
+    /// <summary>
+    /// Gets the bot's first name as registered in Telegram.
+    /// </summary>
+    string FirstName { get; }
+
+    /// <summary>
+    /// Gets the bot's last name as registered in Telegram, if provided.
+    /// Returns null if the bot doesn't have a last name.
+    /// </summary>
+    string? LastName { get; }
 }
