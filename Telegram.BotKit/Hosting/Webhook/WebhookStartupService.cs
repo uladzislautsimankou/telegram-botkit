@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.BotKit.Configuration;
 using Telegram.BotKit.Exceptions;
@@ -19,7 +20,7 @@ internal sealed class WebhookStartupService(
         try
         {
             var me = await bot.GetMe(cancellationToken: cancellationToken);
-            botInfo.SetState(me.Username, me.Id);
+            botInfo.SetState(me.Username, me.Id, me.FirstName, me.LastName);
 
             logger.LogInformation("Bot identified: @{Username} (ID: {Id})", me.Username, me.Id);
 
@@ -29,12 +30,42 @@ internal sealed class WebhookStartupService(
                 .Select(x => Enum.Parse<UpdateType>(x, true))
                 .ToArray();
 
-            await bot.SetWebhook(
-                url: options.Value.WebhookUrl,
-                allowedUpdates: allowedUpdates,
-                cancellationToken: cancellationToken);
+            InputFileStream? certificateInput = null;
+            FileStream? certStream = null;
 
-            logger.LogInformation("Webhook set successfully.");
+            if (!string.IsNullOrWhiteSpace(options.Value.CertificatePath))
+            {
+                if (File.Exists(options.Value.CertificatePath))
+                {
+                    certStream = File.OpenRead(options.Value.CertificatePath);
+                    certificateInput = InputFile.FromStream(certStream, Path.GetFileName(options.Value.CertificatePath));
+                    logger.LogInformation("Using self-signed certificate: {Path}", options.Value.CertificatePath);
+                }
+                else
+                {
+                    logger.LogWarning("Certificate file not found at: {Path}. Webhook will be set without certificate.", options.Value.CertificatePath);
+                }
+            }
+
+            try
+            {
+                await bot.SetWebhook(
+                    url: options.Value.WebhookUrl,
+                    certificate: certificateInput,
+                    ipAddress: options.Value.IpAddress,
+                    maxConnections: options.Value.MaxConnections,
+                    allowedUpdates: allowedUpdates,
+                    dropPendingUpdates: options.Value.DropPendingUpdates,
+                    secretToken: options.Value.SecretToken,
+                    cancellationToken: cancellationToken);
+
+                logger.LogInformation("✅ Webhook set successfully.");
+            }
+            finally
+            {
+                if (certStream is not null)
+                    await certStream.DisposeAsync();
+            }
         }
         catch (Exception ex)
         {

@@ -4,14 +4,14 @@ using Telegram.BotKit.Attributes;
 
 namespace Telegram.BotKit.Binding.Binders;
 
-internal sealed class CommandParameterBinder(
+internal sealed class InlineQueryParameterBinder(
     IEnumerable<IValueConverter> converters
-    ) : ParameterBinderBase<CommandParamAttribute> (converters), ICommandParameterBinder
+    ) : ParameterBinderBase<InlineQyeryParamAttribute>(converters), IInlineQueryParameterBinder
 {
-    public TParams Bind<TParams>(CommandContext context) where TParams : class, new() =>
-         BindInternal<TParams>(context.RawParams);
+    public TParams Bind<TParams>(InlineQueryContext context) where TParams : class, new() => 
+        BindInternal<TParams>(context.RawParams);
 
-    protected override ParamMetadata MapAttribute(PropertyInfo prop, CommandParamAttribute attr) => 
+    protected override ParamMetadata MapAttribute(PropertyInfo prop, InlineQyeryParamAttribute attr) => 
         new ParamMetadata(
             PropertyInfo: prop,
             Name: attr.Name,
@@ -19,5 +19,4 @@ internal sealed class CommandParameterBinder(
             Required: attr.Required,
             PropertyType: prop.PropertyType
         );
-
 }

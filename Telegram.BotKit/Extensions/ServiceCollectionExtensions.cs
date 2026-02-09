@@ -13,6 +13,26 @@ namespace Telegram.BotKit.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
+    /// Scans the specified assembly for implementations of <see cref="IInlineQueryHandler{TParams}"/> and registers them.
+    /// Handlers and their invokers are registered with a <see cref="ServiceLifetime.Transient"/> lifetime.
+    /// </summary>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="assembly">The assembly to scan for handler implementations.</param>
+    /// <returns>A reference to this instance after the operation has completed.</returns>
+    public static IServiceCollection AddInlineQueryHandlers(this IServiceCollection services, Assembly assembly)
+    {
+        AddHandlers(
+            services,
+            assembly,
+            genericInterfaceType: typeof(IInlineQueryHandler<>),
+            genericInvokerType: typeof(InlineQueryHandlerInvoker<>),
+            invokerServiceType: typeof(IInlineQueryHandlerInvoker)
+        );
+
+        return services;
+    }
+
+    /// <summary>
     /// Scans the specified assembly for implementations of <see cref="ICommandHandler{TParams}"/> and registers them.
     /// Handlers and their invokers are registered with a <see cref="ServiceLifetime.Transient"/> lifetime.
     /// </summary>

@@ -9,7 +9,11 @@ internal sealed class BotInfo : IBotInfo
 
     public long Id { get; private set; }
 
-    internal void SetState(string? username, long id)
+    public string FirstName { get; private set; } = string.Empty;
+
+    public string? LastName { get; private set; }
+
+    internal void SetState(string? username, long id, string firstName, string? lastName)
     {
         if (string.IsNullOrWhiteSpace(username))
         {
@@ -18,5 +22,7 @@ internal sealed class BotInfo : IBotInfo
 
         Username = username;
         Id = id;
+        FirstName = firstName;
+        LastName = lastName;
     }
 }
