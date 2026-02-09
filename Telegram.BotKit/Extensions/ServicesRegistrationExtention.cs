@@ -34,17 +34,21 @@ internal static class ServicesRegistrationExtention
 
         services.TryAddTransient<ICommandErrorHandlerMiddleware, DefaultCommandErrorHandler>();
         services.TryAddTransient<ICallbackErrorHandlerMiddleware, DefaultCallbackErrorHandler>();
+        services.TryAddTransient<IInlineQueryErrorHandlerMiddleware, DefaultInlineQueryErrorHandler>();
 
         services.AddTransient<ICommandDispatcher, CommandDispatcher>();
         services.AddTransient<ICallbackDispatcher, CallbackDispatcher>();
+        services.AddTransient<IInlineQueryDispatcher, InlineQueryDispatcher>();
 
         services.AddTransient<CommandRoutingMiddleware>();
         services.AddTransient<CallbackRoutingMiddleware>();
+        services.AddTransient<InlineQueryRoutingMiddleware>();
 
         services.TryAddEnumerable(ServiceDescriptor.Transient<IValueConverter, DefaultValueConverter>());
 
         services.AddTransient<ICallbackParameterBinder, CallbackParameterBinder>();
         services.AddTransient<ICommandParameterBinder, CommandParameterBinder>();
+        services.AddTransient<IInlineQueryParameterBinder, InlineQueryParameterBinder>();
 
         services.AddSingleton<BotInfo>();
         services.AddSingleton<IBotInfo>(sp => sp.GetRequiredService<BotInfo>());

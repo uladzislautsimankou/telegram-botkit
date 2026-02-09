@@ -1,6 +1,5 @@
 ﻿using Telegram.Bot.Types;
 using Telegram.BotKit.Binding.Parsers;
-using Telegram.BotKit.Exceptions;
 
 namespace Telegram.BotKit;
 
@@ -15,12 +14,11 @@ public record CallbackContext
     /// Parses the callback data into a routing key and a dictionary of parameters.
     /// </summary>
     /// <param name="query">The callback query received from Telegram.</param>
-    /// <exception cref="MissingParameterException">Thrown if the query does not contain a Message or a Sender (From).</exception>
     public CallbackContext(CallbackQuery query)
     {
         Query = query;
-        Message = query.Message ?? throw new MissingParameterException(nameof(query.Message));
-        From = query.From ?? throw new MissingParameterException(nameof(query.From));
+        Message = query.Message;
+        From = query.From;
 
         var parsedData = CallbackParser.Parse(query.Data);
 
@@ -36,7 +34,7 @@ public record CallbackContext
     /// <summary>
     /// Gets the message to which the inline keyboard is attached.
     /// </summary>
-    public Message Message { get; }
+    public Message? Message { get; }
 
     /// <summary>
     /// Gets the user who triggered the callback query.
