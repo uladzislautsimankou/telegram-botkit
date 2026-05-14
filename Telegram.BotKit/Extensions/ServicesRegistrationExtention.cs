@@ -26,7 +26,12 @@ internal static class ServicesRegistrationExtention
             .AddTypedClient<ITelegramBotClient>((httpClient, sp) =>
             {
                 var opts = sp.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
-                return new TelegramBotClient(opts.Token, httpClient);
+
+                var botOptions = !string.IsNullOrWhiteSpace(opts.BaseUrl)
+                    ? new TelegramBotClientOptions(opts.Token, opts.BaseUrl)
+                    : new TelegramBotClientOptions(opts.Token);
+
+                return new TelegramBotClient(botOptions, httpClient);
             });
 
         // хендлеры, роутеры, мидлвары
