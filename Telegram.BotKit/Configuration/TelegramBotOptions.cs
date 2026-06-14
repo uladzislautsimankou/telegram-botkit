@@ -9,6 +9,12 @@ internal record TelegramBotOptions
     public string Token { get; set; } = string.Empty;
 
     /// <summary>
+    /// Used to change base URL to your private Bot API server.
+    /// Example: "https://my-telegram-proxy.example.com". Path, query and fragment will be omitted if present.
+    /// </summary>
+    public string? BaseUrl {  get; set; } = null;
+
+    /// <summary>
     /// List of update types the bot should receive (e.g., ["Message", "CallbackQuery"]).
     /// If empty, the bot receives all default update types.
     /// </summary>
