@@ -1,6 +1,8 @@
 ﻿using Telegram.Bot.Types;
 using Telegram.BotKit.Binding.Parsers;
 using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.Invocation;
+using Telegram.BotKit.Models;
 using Telegram.BotKit.Pipeline.Middlewares;
 
 namespace Telegram.BotKit;
@@ -59,4 +61,11 @@ public record CommandContext
     /// If set, the <see cref="CommandRoutingMiddleware"/> will use this value instead of <see cref="Command"/>.
     /// </summary>
     public string? VirtualRoute { get; set; }
+
+    /// <summary>
+    /// Gets or sets the matched handler invoker for this command execution.
+    /// </summary>
+    public CommandMetadata? MatchedCommandMetadata { get; set; }
+
+    internal ICommandHandlerInvoker? MatchedInvoker { get; set; }
 }

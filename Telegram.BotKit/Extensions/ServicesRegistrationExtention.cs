@@ -46,6 +46,8 @@ internal static class ServicesRegistrationExtention
         services.AddTransient<IInlineQueryDispatcher, InlineQueryDispatcher>();
 
         services.AddTransient<CommandRoutingMiddleware>();
+        services.AddTransient<CommandExecutionMiddleware>();
+
         services.AddTransient<CallbackRoutingMiddleware>();
         services.AddTransient<InlineQueryRoutingMiddleware>();
 

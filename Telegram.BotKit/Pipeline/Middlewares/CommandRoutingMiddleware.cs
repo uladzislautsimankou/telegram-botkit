@@ -3,6 +3,7 @@ using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Exceptions;
 using Telegram.BotKit.Helpers;
 using Telegram.BotKit.Invocation;
+using Telegram.BotKit.Models;
 
 namespace Telegram.BotKit.Pipeline.Middlewares;
 
@@ -46,15 +47,20 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
 
         if (_handlerMap.TryGetValue(routeKey, out var invoker))
         {
-            // все ок, нашли команду
-            await invoker.InvokeAsync(context, cancellationToken);
+            context.MatchedInvoker = invoker;
+            context.MatchedCommandMetadata = new CommandMetadata(invoker.HandlerType, invoker.HandlerInstance);
+            
+            await next();
             return;
         }
 
         if (_aliasMap.TryGetValue(routeKey, out var invokerAlias))
         {
             // не нашли команду, но нашли алиас
-            await invokerAlias.InvokeAsync(context, cancellationToken);
+            context.MatchedInvoker = invokerAlias;
+            context.MatchedCommandMetadata = new CommandMetadata(invokerAlias.HandlerType, invokerAlias.HandlerInstance);
+
+            await next();
             return;
         }
 
@@ -81,7 +87,5 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
 
         // в остальных чатах игнорируем, вероятно не нам команда
         return;
-
-        // next() не вызываем, это конец пути
     }
 }
