@@ -1,13 +1,24 @@
-using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
+using Microsoft.Extensions.Options;
 using Telegram.BotKit.Abstractions;
 using Telegram.BotKit.Binding.Binders;
 
 namespace Telegram.BotKit.Tests.Pipeline.Middlewares;
 
-public partial class CommandRoutingMiddlewareTests
+internal class CommandMiddlewaresTestsMocks
 {
-    private class MockBotInfo(string username) : IBotInfo
+    internal class MockOptionsMonitor<T>(T value) : IOptionsMonitor<T>
+    {
+        public T CurrentValue => value;
+        public T Get(string? name) => value;
+        public IDisposable OnChange(Action<T, string?> listener) => new DummyDisposable();
+
+        private class DummyDisposable : IDisposable
+        {
+            public void Dispose() { }
+        }
+    }
+
+    internal class MockBotInfo(string username) : IBotInfo
     {
         public string Username { get; } = username;
 
@@ -18,7 +29,7 @@ public partial class CommandRoutingMiddlewareTests
         public string? LastName { get; } = "Test";
     }
 
-    private class MockCommandHandler(string command, string[]? aliases = null) : ICommandHandler<object>
+    internal class MockCommandHandler(string command, string[]? aliases = null) : ICommandHandler<object>
     {
         public string Command { get; } = command;
 
@@ -35,27 +46,8 @@ public partial class CommandRoutingMiddlewareTests
         }
     }
 
-    private class MockCommandParameterBinder : ICommandParameterBinder
+    internal class MockCommandParameterBinder : ICommandParameterBinder
     {
         public TParams Bind<TParams>(CommandContext context) where TParams : class, new() => new();
-    }
-
-    private CommandContext CreateCommandContext(
-        string command,
-        ChatType chatType,
-        string? targetBotUsername = null)
-    {
-        var text = targetBotUsername != null
-            ? $"/{command}@{targetBotUsername}"
-            : $"/{command}";
-
-        var message = new Message
-        {
-            Chat = new Chat { Id = 123, Type = chatType },
-            From = new User { Id = 456, FirstName = "Test", IsBot = false },
-            Text = text
-        };
-
-        return new CommandContext(message);
     }
 }

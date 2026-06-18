@@ -1,5 +1,7 @@
-﻿using Telegram.Bot.Types.Enums;
+﻿using Microsoft.Extensions.Options;
+using Telegram.Bot.Types.Enums;
 using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Configuration;
 using Telegram.BotKit.Exceptions;
 using Telegram.BotKit.Helpers;
 using Telegram.BotKit.Invocation;
@@ -15,11 +17,18 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
     private readonly CommandSearcher _searcher;
     private readonly IBotInfo _botInfo;
 
-    public CommandRoutingMiddleware(IEnumerable<ICommandHandlerInvoker> invokers, IBotInfo botInfo)
+    private readonly TelegramBotOptions _options;
+
+    public CommandRoutingMiddleware(
+        IEnumerable<ICommandHandlerInvoker> invokers,
+        IBotInfo botInfo,
+        IOptionsMonitor<TelegramBotOptions> optionsMonitor)
     {
         var commandKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _handlerMap = new Dictionary<string, ICommandHandlerInvoker>(StringComparer.OrdinalIgnoreCase);
         _aliasMap = new Dictionary<string, ICommandHandlerInvoker>(StringComparer.OrdinalIgnoreCase);
+
+        _options = optionsMonitor.CurrentValue;
 
         foreach (var invoker in invokers)
         {
@@ -38,10 +47,16 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
     {
         var routeKey = context.VirtualRoute ?? context.Command;
 
+        // если команда в игнор листе, то выходим
+        if (_options.IgnoredCommands.Contains(context.Command, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         if (!string.IsNullOrEmpty(context.TargetBotUsername)
             && !context.TargetBotUsername.Equals(_botInfo.Username, StringComparison.OrdinalIgnoreCase))
         {
-            // комманда вообще не для нашего бота
+            // команда вообще не для нашего бота
             return;
         }
 
