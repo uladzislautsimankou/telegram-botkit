@@ -7,15 +7,19 @@ namespace Telegram.BotKit.Pipeline.Dispatchers;
 internal sealed class CommandDispatcher(
     ICommandErrorHandlerMiddleware errorHandler,
     IEnumerable<ICommandMiddleware> userMiddlewares,
-    CommandRoutingMiddleware routerMiddleware
+    CommandRoutingMiddleware routerMiddleware,
+    CommandExecutionMiddleware executionMiddleware
     ) : ICommandDispatcher
 {
     public async Task DispatchAsync(Message message, CancellationToken cancellationToken = default)
     {
         var context = new CommandContext(message);
 
-        // [Error Handler] -> [User Middleware 1] -> [User Middleware N] -> [Router]
-        ICommandMiddleware[] allSteps = [errorHandler, .. userMiddlewares, routerMiddleware];
+        ICommandMiddleware[] allSteps = [
+            errorHandler,
+            routerMiddleware, 
+            .. userMiddlewares, 
+            executionMiddleware];
 
         NextDelegate pipeline = () => Task.CompletedTask;
 

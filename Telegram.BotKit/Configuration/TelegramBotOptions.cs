@@ -57,4 +57,10 @@ internal record TelegramBotOptions
     /// Optional. Path to the public key certificate file (e.g. "cert.pem") if you use a self-signed certificate.
     /// </summary>
     public string? CertificatePath { get; set; }
+
+    /// <summary>
+    /// Gets or sets a list of command names (without leading slashes) that the bot should completely ignore.
+    /// Commands in this list will be skipped immediately, skipping routing and suggestions.
+    /// </summary>
+    public List<string> IgnoredCommands { get; set; } = new();
 }

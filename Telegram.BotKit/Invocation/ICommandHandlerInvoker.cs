@@ -6,5 +6,9 @@ internal interface ICommandHandlerInvoker
     
     string[] Aliases { get; }
 
+    Type HandlerType { get; }
+
+    object HandlerInstance { get; }
+
     Task InvokeAsync(CommandContext context, CancellationToken cancellationToken = default);
 }
