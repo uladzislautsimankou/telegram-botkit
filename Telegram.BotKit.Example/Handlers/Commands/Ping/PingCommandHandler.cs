@@ -43,6 +43,6 @@ internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandl
         );
 
         // Reply using the framework extension method
-        await bot.ReplyMessage(context, responseText, keyboard, cancellationToken);
+        await bot.ReplyMessage(context, responseText, keyboard, cancellationToken: cancellationToken);
     }
 }

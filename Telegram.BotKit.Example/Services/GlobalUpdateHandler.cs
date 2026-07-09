@@ -22,6 +22,7 @@ public class GlobalUpdateHandler(
 
         var callbackDispatcher = scope.ServiceProvider.GetRequiredService<ICallbackDispatcher>();
         var commandDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
+        var messageDispatcher = scope.ServiceProvider.GetRequiredService<IMessageDispatcher>();
 
         switch (update)
         {
@@ -35,9 +36,9 @@ public class GlobalUpdateHandler(
                 await commandDispatcher.DispatchAsync(message, cancellationToken);
                 break;
 
-            // Some custom handlers
-            case { Message: { Text: string text } message } when !text.StartsWith("/"):
-                await bot.SendMessage(update.Message.Chat.Id, $"You said: {text}. \nTry /ping", cancellationToken: cancellationToken);
+            // Try to dispatch Commands using the Framework
+            case { Message: { } message }:
+                await messageDispatcher.DispatchAsync(message, cancellationToken);
                 break;
 
             default:

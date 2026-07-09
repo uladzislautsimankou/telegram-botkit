@@ -13,6 +13,7 @@ var builder = BotApplication.CreateBuilder(args);
 var assembly = typeof(Program).Assembly;
 builder.Services.AddCommandHandlers(assembly);
 builder.Services.AddCallbackHandlers(assembly);
+builder.Services.AddMessageHandlers(assembly);
 
 // 3. Register Custom Middleware (Optional)
 // This middleware will run for every command.
