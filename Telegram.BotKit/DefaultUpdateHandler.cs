@@ -21,6 +21,7 @@ internal sealed class DefaultUpdateHandler(
         var callbackDispatcher = scope.ServiceProvider.GetRequiredService<ICallbackDispatcher>();
         var commandDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
         var inlineQueryDispatcher = scope.ServiceProvider.GetRequiredService<IInlineQueryDispatcher>();
+        var messageDispatcher = scope.ServiceProvider.GetRequiredService<IMessageDispatcher>();
 
         switch (update)
         {
@@ -37,6 +38,11 @@ internal sealed class DefaultUpdateHandler(
             case { InlineQuery: { } inlineQuery }:
                 logger.LogDebug("Routing inline query: {InlineQuery}", inlineQuery.Query);
                 await inlineQueryDispatcher.DispatchAsync(inlineQuery, cancellationToken);
+                break;
+
+            case { Message: { } message }:
+                logger.LogDebug("Routing message: {MessageType}", message.Type);
+                await messageDispatcher.DispatchAsync(message, cancellationToken);
                 break;
 
             default:

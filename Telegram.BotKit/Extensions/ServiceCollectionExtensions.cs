@@ -73,6 +73,24 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Scans the specified assembly for implementations of <see cref="IMessageHandler"/> and registers them.
+    /// Handlers are registered with a <see cref="ServiceLifetime.Transient"/> lifetime.
+    /// </summary>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="assembly">The assembly to scan for handler implementations.</param>
+    /// <returns>A reference to this instance after the operation has completed.</returns>
+    public static IServiceCollection AddMessageHandlers(this IServiceCollection services, Assembly assembly)
+    {
+        AddHandlers(
+            services,
+            assembly,
+            interfaceType: typeof(IMessageHandler)
+        );
+
+        return services;
+    }
+
+    /// <summary>
     /// Replaces the default <see cref="IUpdateHandler"/> implementation with a custom one.
     /// Use this if you need to completely override the update processing logic.
     /// </summary>
@@ -94,7 +112,7 @@ public static class ServiceCollectionExtensions
         Type genericInvokerType,
         Type invokerServiceType)
     {
-        // Scan assembly for concrete implementations excluding abstracts and interfaces
+        // scan assembly for concrete implementations excluding abstracts and interfaces
         var handlerTypes = assembly
             .GetTypes()
             .Where(t => !t.IsAbstract && !t.IsInterface)
@@ -105,22 +123,38 @@ public static class ServiceCollectionExtensions
 
         foreach (var typeInfo in handlerTypes)
         {
-            // Register the handler implementation itself
+            // register the handler implementation itself
             services.AddTransient(typeInfo.Interface, typeInfo.Implementation);
 
-            // Construct the Generic Invoker type
-            // Extract TParams from IHandler<TParams>
+            // construct the Generic Invoker type
+            // extract TParams from IHandler<TParams>
             var paramsType = typeInfo.Interface.GetGenericArguments()[0];
 
-            // Create HandlerInvoker<TParams> type
+            // create HandlerInvoker<TParams> type
             var concreteInvokerType = genericInvokerType.MakeGenericType(paramsType);
 
-            // Register the Invoker using ActivatorUtilities to inject dependencies automatically
+            // register the Invoker using ActivatorUtilities to inject dependencies automatically
             services.AddTransient(invokerServiceType, sp =>
             {
                 var handler = sp.GetRequiredService(typeInfo.Interface);
                 return ActivatorUtilities.CreateInstance(sp, concreteInvokerType, handler);
             });
+        }
+    }
+
+    private static void AddHandlers(
+       IServiceCollection services,
+       Assembly assembly,
+       Type interfaceType)
+    {
+        // scan assembly for concrete implementations excluding abstracts and interfaces
+        var handlerTypes = assembly
+            .GetTypes()
+            .Where(t => !t.IsAbstract && !t.IsInterface && interfaceType.IsAssignableFrom(t));
+
+        foreach (var type in handlerTypes)
+        {
+            services.AddTransient(interfaceType, type);
         }
     }
 }
