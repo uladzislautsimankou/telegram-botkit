@@ -3,35 +3,33 @@
 namespace Telegram.BotKit.Example.Converters;
 
 /// <summary>
-/// A sample custom converter that extends DateTime parsing logic.
-/// It teaches the bot to understand "today" and "tomorrow" in addition to standard formats.
+/// Converts date strings supporting special "today" and "tomorrow" keywords.
 /// </summary>
 public class CustomDateConverter : IValueConverter
 {
     public bool TryConvert(string input, Type targetType, out object? result)
     {
-        // Check if this converter supports the target type.
-        // We handle DateTime and Nullable<DateTime>.
+        // check if this converter supports the target type
         if (targetType != typeof(DateTime) && targetType != typeof(DateTime?))
         {
             result = null;
-            return false; // We don't know this type, let the next converter try.
+            return false;
         }
 
-        // Handle empty input (let the default logic handle nulls or validation later)
+        // handle empty inputs safely
         if (string.IsNullOrWhiteSpace(input))
         {
             result = null;
             return false;
         }
 
-        // Some Custom Logic: Handle keywords
+        // evaluate special date keywords
         var normalizedInput = input.Trim().ToLowerInvariant();
 
         if (normalizedInput == "today")
         {
             result = DateTime.Today;
-            return true; // Success! Validation stops here.
+            return true;
         }
 
         if (normalizedInput == "tomorrow")
@@ -40,9 +38,7 @@ public class CustomDateConverter : IValueConverter
             return true;
         }
 
-        // Fallback
-        // If the input is not a keyword (e.g., just "2025-01-01"), return false.
-        // The framework will then call DefaultValueConverter to parse standard formats.
+        // defer to next standard converter
         result = null;
         return false;
     }

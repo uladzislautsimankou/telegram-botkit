@@ -5,36 +5,30 @@ using Telegram.BotKit.Example.Services;
 using Telegram.BotKit.Extensions;
 using Telegram.BotKit.Hosting;
 
-// 1. Create the builder. 
-// It automatically loads configuration from appsettings.json and determines the mode (Polling/Webhook).
+// create the builder (automatically loads configurations and selects the hosting mode)
 var builder = BotApplication.CreateBuilder(args);
 
-// 2. Register handlers from the current assembly.
+// register handlers from the current assembly
 var assembly = typeof(Program).Assembly;
 builder.Services.AddCommandHandlers(assembly);
 builder.Services.AddCallbackHandlers(assembly);
 builder.Services.AddMessageHandlers(assembly);
+builder.Services.AddInlineQueryHandlers(assembly);
 
-// 3. Register Custom Middleware (Optional)
-// This middleware will run for every command.
+// register custom middleware (optional)
 builder.Services.AddTransient<ICommandMiddleware, SimpleCommandLogMiddleware>();
 
-// 4. Override Default Error Handler (Optional)
-// If you want custom error messages, register your implementation here.
-// Note: It must be registered AFTER AddTelegramBotFramework (which happens inside CreateBuilder),
-// but since we are using DI, the last registration wins for single services.
+// override default error handler (optional)
 builder.Services.AddTransient<ICommandErrorHandlerMiddleware, MyCustomCommandErrorHandler>();
+builder.Services.AddTransient<IInlineQueryErrorHandlerMiddleware, MyCustomInlineQueryErrorHandler>();
 
-// 5. Registering a custom converter (Optional)
-// The Binder executes converters in REVERSE order of registration.
-// So, CustomDateConverter will run BEFORE the DefaultValueConverter.
+// register a custom converter (optional)
 builder.Services.AddTransient<IValueConverter, CustomDateConverter>();
 
-// 6. Override the Main Update Handler (Global logic)
-// This enables GlobalUpdateHandler defined above.
+// override the main update handler (global logic)
 builder.Services.ReplaceUpdateHandler<GlobalUpdateHandler>();
 
-// 7. Build and Run
+// build and run
 var app = builder.Build();
 
 await app.RunAsync();

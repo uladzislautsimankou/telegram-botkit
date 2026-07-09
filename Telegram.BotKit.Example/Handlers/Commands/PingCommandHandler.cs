@@ -5,15 +5,15 @@ using Telegram.BotKit.Attributes;
 using Telegram.BotKit.Example.Constants;
 using Telegram.BotKit.Extensions;
 
-namespace Telegram.BotKit.Example.Handlers.Commands.Ping;
+namespace Telegram.BotKit.Example.Handlers.Commands;
 
 internal record PingCommandParams
 {
-    // Required positional argument (index 0). Example: /ping "some text"
+    // required positional argument (index 0). Example: /ping "some text"
     [CommandParam(Position = 0, Required = true)]
     public string? Message { get; init; }
 
-    // Named argument. Example: /ping c=5
+    // named argument. Example: /ping c=5
     [CommandParam(Name = "c")]
     public int? Count { get; init; }
 
@@ -21,6 +21,9 @@ internal record PingCommandParams
     public DateTime Date { get; init; }
 }
 
+/// <summary>
+/// Responds with a pong notification and returns a keyboard markup bound to a query callback trigger.
+/// </summary>
 internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCommandParams>
 {
     public string Command => CommandKeys.Example.Ping;
@@ -33,16 +36,15 @@ internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandl
             $"Count: {parameters.Count ?? 0}\n" +
             $"Date: {parameters.Date.ToShortDateString()}";
 
-
-        // Prepare parameters for the callback button
-        // URL: ping:click?m=...&c=...
+        // prepare parameters for the callback button
+        // URL format: ping:click?m=...&c=...
         var callbackData = $"{CallbackKeys.Example.Ping}?m={parameters.Message}&c={parameters.Count}";
 
         var keyboard = new InlineKeyboardMarkup(
             InlineKeyboardButton.WithCallbackData("Test Callback", callbackData)
         );
 
-        // Reply using the framework extension method
+        // reply using the framework extension method
         await bot.ReplyMessage(context, responseText, keyboard, cancellationToken: cancellationToken);
     }
 }
