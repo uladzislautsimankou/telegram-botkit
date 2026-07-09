@@ -11,7 +11,9 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
     public List<string> FindSimilar(string input)
     {
         var inputNorm = Normalize(input);
-        if (inputNorm.Length == 0) return new List<string>();
+
+        if (inputNorm.Length == 0)
+            return new List<string>();
 
         var inputSorted = SortChars(inputNorm);
 
@@ -71,21 +73,49 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
     private static string Normalize(string s)
     {
+        if (string.IsNullOrEmpty(s))
+            return string.Empty;
+
         // keep only alphanumeric characters and normalize to lowercase (e.g., weather_minsk -> weatherminsk)
-        return new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        var buffer = s.Length <= 256
+            ? stackalloc char[s.Length]
+            : new char[s.Length];
+
+        var index = 0;
+
+        foreach (char c in s)
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                buffer[index++] = char.ToLowerInvariant(c);
+            }
+        }
+
+        return index == 0
+            ? string.Empty
+            : new string(buffer[..index]);
     }
 
     private static string SortChars(string s)
     {
-        var chars = s.ToCharArray();
-        Array.Sort(chars);
-        return new string(chars);
+        if (string.IsNullOrEmpty(s))
+            return string.Empty;
+
+        var buffer = s.Length <= 256
+            ? stackalloc char[s.Length]
+            : new char[s.Length];
+
+        s.AsSpan().CopyTo(buffer);
+        buffer.Sort();
+
+        return new string(buffer);
     }
 
     private static int DamerauLevenshtein(ReadOnlySpan<char> source, ReadOnlySpan<char> target, int threshold)
     {
         // return early if length difference exceeds the threshold
-        if (Math.Abs(source.Length - target.Length) > threshold) return threshold + 1;
+        if (Math.Abs(source.Length - target.Length) > threshold)
+            return threshold + 1;
 
         var length1 = source.Length;
         var length2 = target.Length;
@@ -121,7 +151,8 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
             }
 
             // exit early if all edit distances in the row exceed the threshold
-            if (minRowDist > threshold) return threshold + 1;
+            if (minRowDist > threshold)
+                return threshold + 1;
         }
 
         return d[length1 * width + length2];
