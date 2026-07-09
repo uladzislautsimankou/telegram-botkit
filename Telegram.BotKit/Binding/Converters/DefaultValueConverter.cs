@@ -9,10 +9,10 @@ internal class DefaultValueConverter : IValueConverter
     private static readonly string[] _dateFormats =
     [
         "yyyy-MM-dd", // ISO
-        "MM/dd/yyyy", // US (стандарт Invariant)
+        "MM/dd/yyyy", // US (standard Invariant)
         "dd.MM.yyyy", // RU/EU (31.12.2025)
         "dd-MM-yyyy", // RU/EU (31-12-2025)
-        "yyyy/MM/dd"  // Альтернативный ISO
+        "yyyy/MM/dd"  // alternative ISO
     ];
 
     public bool TryConvert(string input, Type targetType, out object? result)
@@ -29,10 +29,10 @@ internal class DefaultValueConverter : IValueConverter
             return false;
         }
 
-        // убираем nullable обертку (int? в int), чтобы TypeDescriptor сработал корректно
+        // remove the nullable wrapper (e.g., int? to int) to allow TypeDescriptor to work correctly
         var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
-        // если нам нужна строка по итогу, то конвертация не нужна
+        // if the target type is already a string, no conversion is required
         if (actualType == typeof(string))
         {
             result = input;
@@ -41,7 +41,7 @@ internal class DefaultValueConverter : IValueConverter
 
         if (actualType.IsEnum)
         {
-            // пробуем распарсить и проверяем, что такое значение реально есть
+            // attempt to parse the enum and verify that the member is explicitly defined
             if (!Enum.TryParse(actualType, input, true, out var enumResult) || !Enum.IsDefined(actualType, enumResult))
             {
                 throw new FormatException($"Value '{input}' is not a valid member of enum '{actualType.Name}'.");
@@ -53,7 +53,7 @@ internal class DefaultValueConverter : IValueConverter
 
         if (actualType == typeof(DateTime))
         {
-            // Пытаемся распарсить по списку форматов
+            // attempt to parse the string using the supported date formats
             if (!DateTime.TryParseExact(input, _dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
             {
                 throw new FormatException($"String '{input}' was not recognized as a valid DateTime. Supported formats: {string.Join(", ", _dateFormats)}");
@@ -91,8 +91,8 @@ internal class DefaultValueConverter : IValueConverter
 
     private static bool IsNullable(Type type)
     {
-        // !IsValueType = cсылочный тип (string, class) -> да
-        // Nullable.GetUnderlyingType != null = Nullable struct (int?) -> да
+        // !IsValueType indicates a reference type (string, class)
+        // Nullable.GetUnderlyingType != null indicates a nullable value type (int?)
         return !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
     }
 }

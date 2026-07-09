@@ -1,94 +1,122 @@
-﻿using Telegram.BotKit.Helpers;
+﻿using FluentAssertions;
+using Telegram.BotKit.Helpers;
 
 namespace Telegram.BotKit.Tests.Helpers;
 
-public class ArgumentParserTests
+public sealed class ArgumentParserTests
 {
+    // verifies that standard space-separated positional arguments are parsed and extracted
     [Fact]
-    public void Parse_ShouldHandlePositionalArgs()
+    public void ParseArgs_WhenPositionalArgumentsAreProvided_ShouldExtractThem()
     {
-        // обычные неименованные
+        // arrange
         var input = "one two three";
+
+        // act
         var result = ArgumentParser.ParseArgs(input);
 
-        Assert.Equal(3, result.Count);
-        Assert.Equal("one", result[0]);
-        Assert.Equal("two", result[1]);
-        Assert.Equal("three", result[2]);
+        // assert
+        result.Should().HaveCount(3);
+        result[0].Should().Be("one");
+        result[1].Should().Be("two");
+        result[2].Should().Be("three");
     }
 
+    // verifies that positional arguments enclosed in quotes are parsed as a single argument with quotes removed
     [Fact]
-    public void Parse_ShouldHandleQuotedPositionalArgs()
+    public void ParseArgs_WhenQuotedPositionalArgumentsAreProvided_ShouldExtractAndStripQuotes()
     {
-        // неименованный с кавычками
+        // arrange
         var input = "\"John Doe\" 25";
+
+        // act
         var result = ArgumentParser.ParseArgs(input);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("John Doe", result[0]);
-        Assert.Equal("25", result[1]);
+        // assert
+        result.Should().HaveCount(2);
+        result[0].Should().Be("John Doe");
+        result[1].Should().Be("25");
     }
 
+    // verifies that simple key=value named arguments are extracted correctly
     [Fact]
-    public void Parse_ShouldHandleNamedArgs_Simple()
+    public void ParseArgs_WhenNamedArgumentsAreProvided_ShouldExtractThem()
     {
-        // обычные именованные
+        // arrange
         var input = "name=Alex age=30";
+
+        // act
         var result = ArgumentParser.ParseArgs(input);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("name=Alex", result[0]);
-        Assert.Equal("age=30", result[1]);
+        // assert
+        result.Should().HaveCount(2);
+        result[0].Should().Be("name=Alex");
+        result[1].Should().Be("age=30");
     }
 
+    // verifies that named arguments with quoted values are parsed and reformatted without quotes
     [Fact]
-    public void Parse_ShouldHandleNamedArgs_Quoted()
+    public void ParseArgs_WhenQuotedNamedArgumentsAreProvided_ShouldExtractAndFormat()
     {
-        // именованные с кавычками
+        // arrange
         var input = "name=\"Alex Smith\" city=\"New York\"";
+
+        // act
         var result = ArgumentParser.ParseArgs(input);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("name=Alex Smith", result[0]);
-        Assert.Equal("city=New York", result[1]);
+        // assert
+        result.Should().HaveCount(2);
+        result[0].Should().Be("name=Alex Smith");
+        result[1].Should().Be("city=New York");
     }
 
+    // verifies that combinations of positional, named, and quoted arguments are parsed correctly
     [Fact]
-    public void Parse_ShouldHandleMixedArgs()
+    public void ParseArgs_WhenMixedArgumentsAreProvided_ShouldExtractAllTypes()
     {
-        // позиционный в кавычках, именованный в кавычках, обычный
+        // arrange
         var input = "\"Pos Value\" key=\"Named Value\" simple";
 
+        // act
         var result = ArgumentParser.ParseArgs(input);
 
-        Assert.Equal(3, result.Count);
-        Assert.Equal("Pos Value", result[0]);
-        Assert.Equal("key=Named Value", result[1]);
-        Assert.Equal("simple", result[2]);
+        // assert
+        result.Should().HaveCount(3);
+        result[0].Should().Be("Pos Value");
+        result[1].Should().Be("key=Named Value");
+        result[2].Should().Be("simple");
     }
 
+    // verifies that multiple spaces between arguments are ignored and do not produce empty parameters
     [Fact]
-    public void Parse_ShouldIgnoreExtraSpaces()
+    public void ParseArgs_WhenInputContainsConsecutiveSpaces_ShouldIgnoreExtraSpaces()
     {
-        // лишние пробелы между аргументами не должны создавать пустых параметров
+        // arrange
         var input = "    one     \"two\"   key=\"val\"";
+
+        // act
         var result = ArgumentParser.ParseArgs(input);
 
-        Assert.Equal(3, result.Count);
-        Assert.Equal("one", result[0]);
-        Assert.Equal("two", result[1]);
-        Assert.Equal("key=val", result[2]);
+        // assert
+        result.Should().HaveCount(3);
+        result[0].Should().Be("one");
+        result[1].Should().Be("two");
+        result[2].Should().Be("key=val");
     }
 
+    // verifies that empty quotes are parsed as empty strings rather than being discarded
     [Fact]
-    public void Parse_ShouldHandleEmptyQuotes()
+    public void ParseArgs_WhenInputContainsEmptyQuotes_ShouldExtractEmptyStrings()
     {
-        // пустая строка в кавычках должна стать пустой строкой, а не исчезнуть
+        // arrange
         var input = "\"\" name=\"\"";
+
+        // act
         var result = ArgumentParser.ParseArgs(input);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("", result[0]);
-        Assert.Equal("name=", result[1]);
+        // assert
+        result.Should().HaveCount(2);
+        result[0].Should().Be(string.Empty);
+        result[1].Should().Be("name=");
     }
 }

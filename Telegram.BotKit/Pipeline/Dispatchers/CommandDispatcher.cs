@@ -15,6 +15,7 @@ internal sealed class CommandDispatcher(
     {
         var context = new CommandContext(message);
 
+        // pipeline execution order is critical: handle errors, run routing, execute custom middlewares, and perform final handler execution
         ICommandMiddleware[] allSteps = [
             errorHandler,
             routerMiddleware, 

@@ -16,12 +16,12 @@ internal record ParamMetadata(
 internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConverter> converters) 
     where TAttribute : Attribute
 {
-    // кэш, что бы каждый раз не дергать рефлексию на кадждую комманду
+    // cache parameter metadata to avoid performing reflection lookups on every invocation
     private readonly ConcurrentDictionary<Type, List<ParamMetadata>> _cache = new();
 
     protected TParams BindInternal<TParams>(List<string> rawParams) where TParams : new()
     {
-        // Разбираем строку на Очередь и Словарь
+        // split raw arguments into a positional queue and named arguments dictionary
         var (positionalQueue, namedArgs) = SplitParams(rawParams);
 
         var instance = new TParams();
@@ -29,9 +29,9 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
 
         foreach (var meta in metadataList.OrderBy(m => m.Position))
         {
-            var rawValue = GetRawValue(meta, namedArgs, positionalQueue);
+            var rawValue = GetRawValue(meta, namedArgs, positionalQueue, metadataList);
 
-            // Проверка Required
+            // validate presence of required parameters
             if (rawValue is null)
             {
                 if (meta.Required)
@@ -40,7 +40,7 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
                 continue;
             }
 
-            // Конвертация
+            // convert the raw string value to the target property type
             try
             {
                 var conversionCtx = new ValueConversionContext(rawValue, meta.PropertyType, instance);
@@ -65,20 +65,37 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
         return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Select(p => (Prop: p, Attr: p.GetCustomAttribute<TAttribute>()))
             .Where(x => x.Attr is not null)
-            // ВАЖНО: Вызываем абстрактный маппер
+            // invoke the abstract mapper method implemented by concrete binders
             .Select(x => MapAttribute(x.Prop, x.Attr!))
             .ToList();
     }
 
-    private static string? GetRawValue(ParamMetadata meta, Dictionary<string, string> named, Queue<string> positional)
+    private static string? GetRawValue(
+        ParamMetadata meta,
+        Dictionary<string, string> named,
+        Queue<string> positional,
+        List<ParamMetadata> allMetadata)
     {
-        // 1. Ищем по имени
+        // match parameter by name
         var key = meta.Name ?? meta.PropertyInfo.Name;
         if (named.TryGetValue(key, out var namedVal)) return namedVal;
 
-        // 2. Ищем по позиции
+        // match parameter by position
         if (meta.Position >= 0 && positional.Count > 0)
         {
+            var isLastPositionalString = meta.PropertyType == typeof(string)
+                && !allMetadata.Any(m => m.Position > meta.Position && m.Position >= 0);
+
+            if (isLastPositionalString)
+            {
+                var remaining = new List<string>(positional.Count);
+                while (positional.Count > 0)
+                {
+                    remaining.Add(positional.Dequeue());
+                }
+                return string.Join(" ", remaining);
+            }
+
             return positional.Dequeue();
         }
         return null;
@@ -91,7 +108,7 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
 
         foreach (var param in rawParams)
         {
-            // Используем Span для скорости
+            // utilize ReadOnlySpan for high performance parsing without unnecessary allocations
             var span = param.AsSpan();
             var eqIndex = span.IndexOf('=');
 
@@ -121,6 +138,4 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
     }
 
     protected abstract ParamMetadata MapAttribute(PropertyInfo prop, TAttribute attr);
-
-
 }

@@ -2,19 +2,19 @@
 
 internal static class CallbackParser
 {
-    // формат callbackKey?param1=val1&paramN=valN
+    // format: callbackKey?param1=val1&paramN=valN
     public static (string Key, Dictionary<string, string> Parameters) Parse(string? data)
     {
-        if (string.IsNullOrEmpty(data))
+        if (string.IsNullOrWhiteSpace(data))
             return (string.Empty, new Dictionary<string, string>());
 
-        // ограничиваем сплит 2 частями: [0] = "callbackKey", [1] = "param1=val1&paramN=valN"
+        // limit the split to 2 parts: [0] = "callbackKey", [1] = "param1=val1&paramN=valN"
         var parts = data.Split('?', 2);
         var key = parts[0];
 
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // если нет параметров, возвращаем сразу
+        // if no parameters are present, return early
         if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[1]))
             return (key, parameters);
 

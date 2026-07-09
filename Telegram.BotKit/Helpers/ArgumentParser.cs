@@ -2,34 +2,45 @@
 
 namespace Telegram.BotKit.Helpers;
 
-internal static class ArgumentParser
+internal static partial class ArgumentParser
 {
-    // Regex explanation:
-    // ([^\s=]+)="([^"]*)"  именованный с кавычками key="val val"   Group[1] = key, Group[2] = val val)
-    // "([^"]*)"            позиционный с кавычками "val val"       Group[3] = val val)
-    // (\S+)                обычный параметр val или key=val        Group[4] (или Value)
-    private static readonly Regex ArgsRegex = new(@"([^\s=]+)=""([^""]*)""|""([^""]*)""|(\S+)", RegexOptions.Compiled);
+    // regex explanation:
+    // ([^\s=]+)="([^"]*)"  named parameter with quotes key="val val" (Group[1] = key, Group[2] = val val)
+    // "([^"]*)"            positional parameter with quotes "val val" (Group[3] = val val)
+    // (\S+)                standard parameter val or key=val (Group[4] or raw Value)
+    [GeneratedRegex(@"([^\s=]+)=""([^""]*)""|""([^""]*)""|(\S+)")]
+    private static partial Regex ArgsRegex();
 
     public static List<string> ParseArgs(string rawArgs)
     {
         if (string.IsNullOrWhiteSpace(rawArgs))
             return new();
 
-        return ArgsRegex.Matches(rawArgs)
-            .Select(m =>
+        var matches = ArgsRegex().Matches(rawArgs);
+        var results = new List<string>(matches.Count);
+
+        foreach (Match m in matches)
+        {
+            // if the argument is a named parameter with quotes: key="val val"
+            // extract the value from the quotes and format it back as key=val val
+            if (m.Groups[1].Success)
             {
-                // если key="val val"
-                // вырезаем из кавычек и склеиваем обратно в key=val val
-                if (m.Groups[1].Success)
-                    return $"{m.Groups[1].Value}={m.Groups[2].Value}";
+                results.Add($"{m.Groups[1].Value}={m.Groups[2].Value}");
+                continue;
+            }
 
-                // если просто кавычки
-                if (m.Groups[3].Success)
-                    return m.Groups[3].Value;
+            // if it is a positional parameter with quotes: "val val"
+            // extract the inner unquoted string
+            if (m.Groups[3].Success)
+            {
+                results.Add(m.Groups[3].Value);
+                continue;
+            }
 
-                // Иначе берем просто слово
-                return m.Value;
-            })
-            .ToList();
+            // otherwise, add the entire matched plain word (e.g., val or key=val)
+            results.Add(m.Value);
+        }
+
+        return results;
     }
 }

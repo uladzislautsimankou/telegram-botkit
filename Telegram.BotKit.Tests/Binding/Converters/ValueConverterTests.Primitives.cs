@@ -1,83 +1,182 @@
-﻿namespace Telegram.BotKit.Tests.Binding.Converters;
+﻿using FluentAssertions;
 
-public partial class ValueConverterTests
+namespace Telegram.BotKit.Tests.Binding.Converters;
+
+public sealed partial class ValueConverterTests
 {
+    // verifies that standard primitives can be parsed and converted successfully
     [Theory]
     [InlineData("123", typeof(int), 123)]
     [InlineData("true", typeof(bool), true)]
     [InlineData("False", typeof(bool), false)]
-    public void Convert_ShouldWorkForPrimitives(string input, Type type, object expected)
+    public void TryConvert_WhenPrimitiveTypeIsValid_ShouldConvertSuccessfully(string input, Type type, object expected)
     {
+        // arrange & act
         var success = _converter.TryConvert(input, type, out var result);
 
-        Assert.True(success);
-        Assert.Equal(expected, result);
+        // assert
+        success.Should().BeTrue();
+        result.Should().Be(expected);
     }
 
+    // verifies that fractional double strings with dot or comma decimal marks are parsed correctly
     [Theory]
     [InlineData("12.5", 12.5)]
     [InlineData("12,5", 12.5)]
-    public void Convert_ShouldHandleDouble(string input, double expected)
+    public void TryConvert_WhenDoubleIsValid_ShouldConvertSuccessfully(string input, double expected)
     {
-        var success = _converter.TryConvert(input, typeof(double), out var result);
+        // arrange
+        var targetType = typeof(double);
 
-        Assert.True(success);
-        Assert.Equal(expected, result);
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().Be(expected);
     }
 
+    // verifies that direct strings bypass converter parsing and are returned as-is
     [Fact]
-    public void Convert_ShouldReturnInputString_WhenTargetIsString()
+    public void TryConvert_WhenTargetTypeIsString_ShouldReturnInputDirectly()
     {
-        var success = _converter.TryConvert("hello", typeof(string), out var result);
+        // arrange
+        var input = "hello";
+        var targetType = typeof(string);
 
-        Assert.True(success);
-        Assert.Equal("hello", result);
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().Be("hello");
     }
 
+    // verifies that an invalid integer string throws a format exception
     [Fact]
-    public void Convert_ShouldThrow_WhenInvalidInt()
+    public void TryConvert_WhenIntIsInvalid_ShouldThrowFormatException()
     {
-        Assert.Throws<FormatException>(() =>
-        {
-            _converter.TryConvert("not-a-number", typeof(int), out _);
-        });
+        // arrange
+        var invalidInt = "not-a-number";
+        var targetType = typeof(int);
+
+        // act
+        var act = () => _converter.TryConvert(invalidInt, targetType, out _);
+
+        // assert
+        act.Should().Throw<FormatException>();
     }
 
+    // verifies that unsupported target types without built-in string converters fail gracefully
     [Fact]
-    public void Convert_ShouldReturnFalse_WhenNoTypeConverter()
+    public void TryConvert_WhenTypeHasNoDefaultConverter_ShouldReturnFalseAndNull()
     {
-        var success = _converter.TryConvert("something", typeof(NoConverterType), out var result);
+        // arrange
+        var input = "something";
+        var targetType = typeof(NoConverterType);
 
-        Assert.False(success);
-        Assert.Null(result);
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeFalse();
+        result.Should().BeNull();
     }
 
+    // verifies that empty input returns success and null for nullable value types
     [Fact]
-    public void Convert_ShouldReturnTrue_AndNull_ForEmptyString_IfNullable()
+    public void TryConvert_WhenInputIsEmptyAndTypeIsNullableValueType_ShouldReturnTrueAndNull()
     {
-        // int? может быть null
-        var success = _converter.TryConvert("", typeof(int?), out var result);
+        // arrange
+        var input = "";
+        var targetType = typeof(int?);
 
-        Assert.True(success);
-        Assert.Null(result);
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().BeNull();
     }
 
+    // verifies that empty input returns success and null for reference types like strings
     [Fact]
-    public void Convert_ShouldReturnTrue_AndNull_ForEmptyString_IfString()
+    public void TryConvert_WhenInputIsEmptyAndTypeIsString_ShouldReturnTrueAndNull()
     {
-        // string может быть null
-        var success = _converter.TryConvert("", typeof(string), out var result);
+        // arrange
+        var input = "";
+        var targetType = typeof(string);
 
-        Assert.True(success);
-        Assert.Null(result);
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().BeNull();
     }
 
+    // verifies that empty input fails when attempting to bind to non-nullable value types
     [Fact]
-    public void Convert_ShouldReturnFalse_ForEmptyString_IfNotNullable()
+    public void TryConvert_WhenInputIsEmptyAndTypeIsNotNullable_ShouldReturnFalse()
     {
-        // int не может быть null
-        var success = _converter.TryConvert("", typeof(int), out var result);
+        // arrange
+        var input = "";
+        var targetType = typeof(int);
 
-        Assert.False(success);
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeFalse();
+    }
+
+    // verifies that fractional float strings with dot or comma decimal marks are parsed correctly
+    [Theory]
+    [InlineData("3.14", 3.14f)]
+    [InlineData("3,14", 3.14f)]
+    public void TryConvert_WhenFloatIsValid_ShouldConvertSuccessfully(string input, float expected)
+    {
+        // arrange
+        var targetType = typeof(float);
+
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().Be(expected);
+    }
+
+    // verifies that fractional decimal strings with dot or comma decimal marks are parsed correctly
+    [Theory]
+    [InlineData("100.50", "100.50")]
+    [InlineData("100,50", "100.50")]
+    public void TryConvert_WhenDecimalIsValid_ShouldConvertSuccessfully(string input, string expected)
+    {
+        // arrange
+        var targetType = typeof(decimal);
+        var expectedValue = decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture);
+
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().Be(expectedValue);
+    }
+
+    // verifies that converting an invalid value for a type with a default descriptor throws format exception
+    [Fact]
+    public void TryConvert_WhenConversionFails_ShouldThrowFormatException()
+    {
+        // arrange
+        var input = "not-a-boolean";
+        var targetType = typeof(bool);
+
+        // act
+        var act = () => _converter.TryConvert(input, targetType, out _);
+
+        // assert
+        act.Should().Throw<FormatException>();
     }
 }

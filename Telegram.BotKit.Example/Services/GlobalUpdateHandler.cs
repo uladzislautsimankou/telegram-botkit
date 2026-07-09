@@ -6,8 +6,7 @@ using Telegram.BotKit.Abstractions;
 namespace Telegram.BotKit.Example.Services;
 
 /// <summary>
-/// A custom update handler that replaces the framework's default handler.
-/// This gives you full control over how updates are processed.
+/// Intercepts and routes update events before handing them off to individual framework dispatchers.
 /// </summary>
 public class GlobalUpdateHandler(
     IServiceProvider serviceProvider,
@@ -22,22 +21,29 @@ public class GlobalUpdateHandler(
 
         var callbackDispatcher = scope.ServiceProvider.GetRequiredService<ICallbackDispatcher>();
         var commandDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
+        var messageDispatcher = scope.ServiceProvider.GetRequiredService<IMessageDispatcher>();
+        var inlineQueryDispatcher = scope.ServiceProvider.GetRequiredService<IInlineQueryDispatcher>();
 
         switch (update)
         {
-            // Try to dispatch Commands using the Framework
+            // dispatch callback queries
             case { CallbackQuery: { } callback }:
                 await callbackDispatcher.DispatchAsync(callback, cancellationToken);
                 break;
 
-            // Try to dispatch Commands using the Framework
+            // dispatch commands starting with slash
             case { Message: { Text: string text } message } when text.StartsWith("/"):
                 await commandDispatcher.DispatchAsync(message, cancellationToken);
                 break;
 
-            // Some custom handlers
-            case { Message: { Text: string text } message } when !text.StartsWith("/"):
-                await bot.SendMessage(update.Message.Chat.Id, $"You said: {text}. \nTry /ping", cancellationToken: cancellationToken);
+            // dispatch standard message updates
+            case { Message: { } message }:
+                await messageDispatcher.DispatchAsync(message, cancellationToken);
+                break;
+
+            // dispatch inline queries
+            case { InlineQuery: { } inlineQuery }:
+                await inlineQueryDispatcher.DispatchAsync(inlineQuery, cancellationToken);
                 break;
 
             default:

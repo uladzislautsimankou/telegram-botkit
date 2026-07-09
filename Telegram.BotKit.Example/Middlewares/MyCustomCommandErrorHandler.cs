@@ -6,9 +6,9 @@ using Telegram.BotKit.Exceptions;
 namespace Telegram.BotKit.Example.Middlewares;
 
 /// <summary>
-/// Custom error handler that overrides the default behavior.
+/// Intercepts exceptions thrown during command execution to reply with styled diagnostic HTML.
 /// </summary>
-public class MyCustomCommandErrorHandler(
+internal sealed class MyCustomCommandErrorHandler(
     ITelegramBotClient bot,
     ILogger<MyCustomCommandErrorHandler> logger
     ) : ICommandErrorHandlerMiddleware
@@ -21,7 +21,7 @@ public class MyCustomCommandErrorHandler(
         }
         catch (MissingParameterException ex)
         {
-            // Custom response for missing parameters
+            // custom HTML notification for missing fields
             await bot.SendMessage(context.Message.Chat.Id,
                 $"<b>Oops!</b> You forgot the parameter: <code>{ex.ParameterName}</code>",
                 parseMode: ParseMode.Html,

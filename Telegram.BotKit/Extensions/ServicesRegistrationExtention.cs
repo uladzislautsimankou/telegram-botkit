@@ -16,12 +16,18 @@ namespace Telegram.BotKit.Extensions;
 
 internal static class ServicesRegistrationExtention
 {
+    /// <summary>
+    /// Registers core Telegram.BotKit framework services, configurations, pipelines, and the <see cref="ITelegramBotClient"/> in the dependency injection container.
+    /// </summary>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="configuration">The configuration instance containing "TelegramBot" options.</param>
+    /// <returns>The <see cref="IServiceCollection"/> instance for method chaining.</returns>
     public static IServiceCollection AddTelegramBotFramework(this IServiceCollection services, IConfiguration configuration)
     {
-        // конфигурации
+        // bind and configure telegram bot options
         services.Configure<TelegramBotOptions>(configuration.GetSection("TelegramBot"));
 
-        // клиент бота
+        // register the typed telegram bot client with a dedicated HTTP client
         services.AddHttpClient("tg_client")
             .AddTypedClient<ITelegramBotClient>((httpClient, sp) =>
             {
@@ -34,29 +40,44 @@ internal static class ServicesRegistrationExtention
                 return new TelegramBotClient(botOptions, httpClient);
             });
 
-        // хендлеры, роутеры, мидлвары
+        // register the main update handler receiving and distributing updates
         services.TryAddSingleton<IUpdateHandler, DefaultUpdateHandler>();
 
+        // register default error handlers for various update types
         services.TryAddTransient<ICommandErrorHandlerMiddleware, DefaultCommandErrorHandler>();
         services.TryAddTransient<ICallbackErrorHandlerMiddleware, DefaultCallbackErrorHandler>();
         services.TryAddTransient<IInlineQueryErrorHandlerMiddleware, DefaultInlineQueryErrorHandler>();
+        services.TryAddTransient<IMessageErrorHandlerMiddleware, DefaultMessageErrorHandler>();
 
+        // register default state middleware
+        services.TryAddTransient<IMessageStateMiddleware, DefaultMessageStateMiddleware>();
+
+        // register dispatchers to orchestrate the pipeline for each update type
         services.AddTransient<ICommandDispatcher, CommandDispatcher>();
         services.AddTransient<ICallbackDispatcher, CallbackDispatcher>();
         services.AddTransient<IInlineQueryDispatcher, InlineQueryDispatcher>();
+        services.AddTransient<IMessageDispatcher, MessageDispatcher>();
 
+        // register command pipeline middlewares
         services.AddTransient<CommandRoutingMiddleware>();
         services.AddTransient<CommandExecutionMiddleware>();
 
+        // register callback and inline query pipeline middlewares
         services.AddTransient<CallbackRoutingMiddleware>();
         services.AddTransient<InlineQueryRoutingMiddleware>();
 
+        // register message pipeline middlewares
+        services.AddTransient<MessageRoutingMiddleware>();
+        services.AddTransient<MessageExecutionMiddleware>();
+
+        // register parameter binders and converters for model binding from incoming updates
         services.TryAddEnumerable(ServiceDescriptor.Transient<IValueConverter, DefaultValueConverter>());
 
         services.AddTransient<ICallbackParameterBinder, CallbackParameterBinder>();
         services.AddTransient<ICommandParameterBinder, CommandParameterBinder>();
         services.AddTransient<IInlineQueryParameterBinder, InlineQueryParameterBinder>();
 
+        // register bot metadata and identification services
         services.AddSingleton<BotInfo>();
         services.AddSingleton<IBotInfo>(sp => sp.GetRequiredService<BotInfo>());
 

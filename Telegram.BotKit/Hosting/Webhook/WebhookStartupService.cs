@@ -78,7 +78,7 @@ internal sealed class WebhookStartupService(
     {
         logger.LogInformation("Removing Webhook...");
 
-        // даже если и не удалится, то не критично
+        // even if the webhook fails to delete, it is not critical
         await bot.DeleteWebhook(cancellationToken: cancellationToken);
     }
 }

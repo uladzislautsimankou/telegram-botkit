@@ -33,14 +33,14 @@ internal sealed class PollingService(
             throw new BotStartupException("Failed to initialize bot identity.", ex);
         }
 
-        // очистка вебхука на всякий случай
+        // clear webhook just in case
         try
         {
             await bot.DeleteWebhook(cancellationToken: stoppingToken);
         }
         catch (Exception ex)
         {
-            // если упало удаление вебхука - это не всегда критично, но подозрительно
+            // a failed webhook deletion is not always critical, but it is suspicious, so we log it as a warning
             logger.LogWarning("Could not delete webhook: {Message}", ex.Message);
         }
 
