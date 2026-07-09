@@ -67,6 +67,31 @@ public sealed class InlineQueryRoutingMiddlewareTests
         await act.Should().ThrowAsync<RouteNotFoundException>();
     }
 
+    // verifies that the middleware falls back to a global catch-all handler when the specific query key is unrecognized
+    [Fact]
+    public async Task InvokeAsync_WhenQueryKeyIsUnknownAndFallbackExists_ShouldExecuteFallbackHandlerAndShortCircuit()
+    {
+        // arrange
+        var specificInvoker = Substitute.For<IInlineQueryHandlerInvoker>();
+        specificInvoker.Key.Returns("search");
+
+        var fallbackInvoker = Substitute.For<IInlineQueryHandlerInvoker>();
+        fallbackInvoker.Key.Returns(string.Empty);
+
+        var middleware = new InlineQueryRoutingMiddleware([specificInvoker, fallbackInvoker]);
+        var context = CreateInlineContext("unknown query");
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        await fallbackInvoker.Received(1).InvokeAsync(context, TestContext.Current.CancellationToken);
+        await specificInvoker.DidNotReceiveWithAnyArgs().InvokeAsync(Arg.Any<InlineQueryContext>(), Arg.Any<CancellationToken>());
+        called.Should().BeFalse();
+    }
+
     // verifies that an empty inline query fails to resolve and throws a route not found exception
     [Fact]
     public async Task InvokeAsync_WhenQueryIsEmpty_ShouldThrowRouteNotFoundException()

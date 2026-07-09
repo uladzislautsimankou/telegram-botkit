@@ -58,6 +58,22 @@ public sealed class InlineQueryParameterBinderTests
         result.IsActive.Should().BeTrue();
     }
 
+    // verifies that the last positional string parameter consumes all remaining positional arguments by joining them with spaces
+    [Fact]
+    public void Bind_WhenStringPositionalParameterIsLast_ShouldConsumeRemainingPositionalArguments()
+    {
+        // arrange
+        var ctx = CreateContext("query search_term with multiple words p=5 IsActive=true");
+
+        // act
+        var result = _binder.Bind<InlineDto>(ctx);
+
+        // assert
+        result.Query.Should().Be("search_term with multiple words");
+        result.Page.Should().Be(5);
+        result.IsActive.Should().BeTrue();
+    }
+
     // verifies that missing required inline query parameters result in a missing parameter exception
     [Fact]
     public void Bind_WhenRequiredParameterIsMissing_ShouldThrowMissingParameterException()

@@ -13,12 +13,20 @@ internal class InlineQueryRoutingMiddleware(
 
     public async Task InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        if (!_handlerMap.TryGetValue(context.Key, out var invoker))
+        // attempt to route by the exact first word (e.g., "@bot search item")
+        if (_handlerMap.TryGetValue(context.Key, out var invoker))
         {
-            // inline query handler not found
-            throw new RouteNotFoundException(context.Key);
+            await invoker.InvokeAsync(context, cancellationToken);
+            return;
         }
 
-        await invoker.InvokeAsync(context, cancellationToken);
+        // if no exact route matches the key, fallback to a global handler (without a key)
+        if (_handlerMap.TryGetValue(string.Empty, out var fallbackInvoker))
+        {
+            await fallbackInvoker.InvokeAsync(context, cancellationToken);
+            return;
+        }
+
+        throw new RouteNotFoundException(context.Key);
     }
 }

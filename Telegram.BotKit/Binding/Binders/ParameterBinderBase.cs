@@ -29,7 +29,7 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
 
         foreach (var meta in metadataList.OrderBy(m => m.Position))
         {
-            var rawValue = GetRawValue(meta, namedArgs, positionalQueue);
+            var rawValue = GetRawValue(meta, namedArgs, positionalQueue, metadataList);
 
             // validate presence of required parameters
             if (rawValue is null)
@@ -70,7 +70,11 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
             .ToList();
     }
 
-    private static string? GetRawValue(ParamMetadata meta, Dictionary<string, string> named, Queue<string> positional)
+    private static string? GetRawValue(
+        ParamMetadata meta,
+        Dictionary<string, string> named,
+        Queue<string> positional,
+        List<ParamMetadata> allMetadata)
     {
         // match parameter by name
         var key = meta.Name ?? meta.PropertyInfo.Name;
@@ -79,6 +83,19 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
         // match parameter by position
         if (meta.Position >= 0 && positional.Count > 0)
         {
+            var isLastPositionalString = meta.PropertyType == typeof(string)
+                && !allMetadata.Any(m => m.Position > meta.Position && m.Position >= 0);
+
+            if (isLastPositionalString)
+            {
+                var remaining = new List<string>(positional.Count);
+                while (positional.Count > 0)
+                {
+                    remaining.Add(positional.Dequeue());
+                }
+                return string.Join(" ", remaining);
+            }
+
             return positional.Dequeue();
         }
         return null;
