@@ -6,7 +6,7 @@ namespace Telegram.BotKit.Pipeline.Middlewares;
 /// A default demonstration of <see cref="IMessageStateMiddleware"/> illustrating how to fetch
 /// and assign the user's conversational state before routing and handler execution begin.
 /// </summary>
-internal sealed class DefaultUserStateMiddleware : IMessageStateMiddleware
+internal sealed class DefaultMessageStateMiddleware : IMessageStateMiddleware
 {
     public async Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {

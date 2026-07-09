@@ -1,5 +1,4 @@
-﻿
-namespace Telegram.BotKit.Abstractions;
+﻿namespace Telegram.BotKit.Abstractions;
 
 /// <summary>
 /// Represents a middleware component that processes callback queries in the pipeline.

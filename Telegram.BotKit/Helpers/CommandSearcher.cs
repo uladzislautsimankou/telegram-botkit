@@ -15,42 +15,42 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
         var inputSorted = SortChars(inputNorm);
 
-        // aдаптивный порог ошибок
-        // до 4 букв (ping) - макс 1 ошибка
-        // от 4 букв (weather) - макс 2 ошибки
-        int maxDist = inputNorm.Length <= 4 ? 1 : 2;
+        // adaptive error threshold
+        // up to 4 characters (e.g. ping): maximum 1 error
+        // more than 4 characters (e.g. weather): maximum 2 errors
+        var maxDist = inputNorm.Length <= 4 ? 1 : 2;
 
         var candidates = new List<(string Cmd, int Score)>();
 
         foreach (var item in _index)
         {
-            int currentBestDist = int.MaxValue;
+            var currentBestDist = int.MaxValue;
 
-            // проверяем, только если длины сопоставимы (png -> ping)
+            // check only if lengths are comparable (e.g., png -> ping)
             if (Math.Abs(inputNorm.Length - item.Normalized.Length) <= maxDist)
             {
-                int dist = DamerauLevenshtein(inputNorm.AsSpan(), item.Normalized.AsSpan(), maxDist);
+                var dist = DamerauLevenshtein(inputNorm.AsSpan(), item.Normalized.AsSpan(), maxDist);
                 currentBestDist = Math.Min(currentBestDist, dist);
             }
 
-            // если команда длиннее ввода, проверяем её начало (wether -> weather_minsk)
+            // if the command is longer than the input, check its prefix (e.g., wether -> weather_minsk)
             if (item.Normalized.Length > inputNorm.Length)
             {
-                // кусок команды равный длине ввода + 1 (на случай пропущенной буквы)
-                int lengthToTake = Math.Min(item.Normalized.Length, inputNorm.Length + 1);
+                // take a slice of the command equal to input length + 1 to account for a missing character
+                var lengthToTake = Math.Min(item.Normalized.Length, inputNorm.Length + 1);
                 var prefix = item.Normalized.AsSpan().Slice(0, lengthToTake);
 
-                int dist = DamerauLevenshtein(inputNorm.AsSpan(), prefix, maxDist);
+                var dist = DamerauLevenshtein(inputNorm.AsSpan(), prefix, maxDist);
                 currentBestDist = Math.Min(currentBestDist, dist);
             }
 
-            // если обычные методы не дали хорошего результата (check_bday -> bday_check)
+            // fallback: if standard matches yield no results, check sorted character sequence (e.g., check_bday -> bday_check)
             if (currentBestDist > maxDist)
             {
-                // для sorted логики префиксы не работают, нужны сопоставимые длины
+                // sorted character matching requires comparable lengths as prefix matching does not apply
                 if (Math.Abs(inputNorm.Length - item.Normalized.Length) <= maxDist)
                 {
-                    int dist = DamerauLevenshtein(inputSorted.AsSpan(), item.Sorted.AsSpan(), maxDist);
+                    var dist = DamerauLevenshtein(inputSorted.AsSpan(), item.Sorted.AsSpan(), maxDist);
                     currentBestDist = Math.Min(currentBestDist, dist);
                 }
             }
@@ -63,7 +63,7 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
         return candidates
             .OrderBy(x => x.Score)
-            .ThenBy(x => Math.Abs(x.Cmd.Length - input.Length)) // при прочих равных берем более близкую по длине
+            .ThenBy(x => Math.Abs(x.Cmd.Length - input.Length)) // tie-breaker: prefer candidate with closer length to input
             .Take(3)
             .Select(x => x.Cmd)
             .ToList();
@@ -71,7 +71,7 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
     private static string Normalize(string s)
     {
-        // оставляем только буквы и цифры (weather_minsk -> weatherminsk)
+        // keep only alphanumeric characters and normalize to lowercase (e.g., weather_minsk -> weatherminsk)
         return new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
     }
 
@@ -84,35 +84,35 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
     private static int DamerauLevenshtein(ReadOnlySpan<char> source, ReadOnlySpan<char> target, int threshold)
     {
-        // если разница длин уже больше порога — сразу отказ
+        // return early if length difference exceeds the threshold
         if (Math.Abs(source.Length - target.Length) > threshold) return threshold + 1;
 
-        int length1 = source.Length;
-        int length2 = target.Length;
+        var length1 = source.Length;
+        var length2 = target.Length;
 
         Span<int> d = stackalloc int[(length1 + 1) * (length2 + 1)];
-        int width = length2 + 1;
+        var width = length2 + 1;
 
         for (int i = 0; i <= length1; i++) d[i * width] = i;
         for (int j = 0; j <= length2; j++) d[j] = j;
 
         for (int i = 1; i <= length1; i++)
         {
-            int minRowDist = int.MaxValue;
+            var minRowDist = int.MaxValue;
             for (int j = 1; j <= length2; j++)
             {
-                int cost = source[i - 1] == target[j - 1] ? 0 : 1;
+                var cost = source[i - 1] == target[j - 1] ? 0 : 1;
 
-                int deletion = d[(i - 1) * width + j] + 1;
-                int insertion = d[i * width + (j - 1)] + 1;
-                int substitution = d[(i - 1) * width + (j - 1)] + cost;
+                var deletion = d[(i - 1) * width + j] + 1;
+                var insertion = d[i * width + (j - 1)] + 1;
+                var substitution = d[(i - 1) * width + (j - 1)] + cost;
 
-                int current = Math.Min(deletion, Math.Min(insertion, substitution));
+                var current = Math.Min(deletion, Math.Min(insertion, substitution));
 
-                // транспозиция (pnig -> ping)
+                // transposition (e.g., pnig -> ping)
                 if (i > 1 && j > 1 && source[i - 1] == target[j - 2] && source[i - 2] == target[j - 1])
                 {
-                    int trans = d[(i - 2) * width + (j - 2)] + cost;
+                    var trans = d[(i - 2) * width + (j - 2)] + cost;
                     current = Math.Min(current, trans);
                 }
 
@@ -120,7 +120,7 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
                 if (current < minRowDist) minRowDist = current;
             }
 
-            // если в строке матрицы все значения уже больше порога, выходим
+            // exit early if all edit distances in the row exceed the threshold
             if (minRowDist > threshold) return threshold + 1;
         }
 

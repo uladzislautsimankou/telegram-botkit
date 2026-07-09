@@ -3,7 +3,6 @@ using Telegram.BotKit.Binding.Parsers;
 using Telegram.BotKit.Exceptions;
 using Telegram.BotKit.Invocation;
 using Telegram.BotKit.Models;
-using Telegram.BotKit.Pipeline.Middlewares;
 
 namespace Telegram.BotKit;
 
@@ -67,5 +66,8 @@ public record CommandContext
     /// </summary>
     public CommandMetadata? MatchedCommandMetadata { get; set; }
 
+    /// <summary>
+    /// Gets or sets the matched handler invoker responsible for executing the command.
+    /// </summary>
     internal ICommandHandlerInvoker? MatchedInvoker { get; set; }
 }

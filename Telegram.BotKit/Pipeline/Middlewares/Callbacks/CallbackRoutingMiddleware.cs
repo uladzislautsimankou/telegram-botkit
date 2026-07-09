@@ -15,12 +15,12 @@ internal sealed class CallbackRoutingMiddleware(
     {
         if (!_handlerMap.TryGetValue(context.Key, out var invoker))
         {
-            //коллбэк не нашли
+            // callback handler not found
             throw new RouteNotFoundException(context.Key);
         }
 
         await invoker.InvokeAsync(context, cancellationToken);
 
-        // next() не вызываем, это конец пути
+        // do not invoke next() as this is the end of the pipeline
     }
 }

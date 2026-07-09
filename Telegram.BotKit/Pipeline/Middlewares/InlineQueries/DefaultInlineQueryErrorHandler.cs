@@ -3,6 +3,10 @@ using Telegram.BotKit.Abstractions;
 
 namespace Telegram.BotKit.Pipeline.Middlewares;
 
+/// <summary>
+/// A default implementation of <see cref="IInlineQueryErrorHandlerMiddleware"/> that provides
+/// global error logging and handling during inline query execution.
+/// </summary>
 internal class DefaultInlineQueryErrorHandler(
     ILogger<DefaultInlineQueryErrorHandler> logger
     ) : IInlineQueryErrorHandlerMiddleware

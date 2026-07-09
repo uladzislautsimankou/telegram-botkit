@@ -5,6 +5,10 @@ using Telegram.BotKit.Extensions;
 
 namespace Telegram.BotKit.Pipeline.Middlewares;
 
+/// <summary>
+/// A default implementation of <see cref="IMessageErrorHandlerMiddleware"/> that provides
+/// global error reporting and handling during standard message execution.
+/// </summary>
 internal sealed class DefaultMessageErrorHandler(
     ITelegramBotClient bot,
     ILogger<DefaultMessageErrorHandler> logger

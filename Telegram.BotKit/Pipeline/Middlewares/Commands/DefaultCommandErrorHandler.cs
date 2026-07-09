@@ -6,6 +6,10 @@ using Telegram.BotKit.Extensions;
 
 namespace Telegram.BotKit.Pipeline.Middlewares;
 
+/// <summary>
+/// A default implementation of <see cref="ICommandErrorHandlerMiddleware"/> that provides
+/// global error handling during command execution, catching binding failures and suggesting alternative commands.
+/// </summary>
 internal sealed class DefaultCommandErrorHandler(
     ITelegramBotClient bot,
     ILogger<DefaultCommandErrorHandler> logger
@@ -75,7 +79,7 @@ internal sealed class DefaultCommandErrorHandler(
         }
         catch (Exception ex)
         {
-            // если почему-то сообщение не отправилось, то просто залоггируем этот момент
+            // log the warning if the error message fails to send for some reason
             logger.LogWarning(ex, "Failed to send error response to chat {ChatId}", context.Message.Chat.Id);
         }
     }

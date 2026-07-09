@@ -8,7 +8,7 @@ namespace Telegram.BotKit.Binding.Binders;
 
 internal sealed class CallbackParameterBinder(IEnumerable<IValueConverter> converters) : ICallbackParameterBinder
 {
-    // кэш, что бы каждый раз не дергать рефлексию на кадждый коллбэк
+    // cache properties of target models to avoid expensive reflection lookups on every callback
     private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _cache = new();
 
     public TParams Bind<TParams>(CallbackContext context) where TParams : class, new()
@@ -53,7 +53,7 @@ internal sealed class CallbackParameterBinder(IEnumerable<IValueConverter> conve
 
             var attr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
 
-            // если атрибут есть, то берем имя оттуда. если нет, то берем имя свойства
+            // use the JsonPropertyNameAttribute override if present; fallback to property name otherwise
             var key = attr?.Name ?? prop.Name;
 
             if (!map.ContainsKey(key))

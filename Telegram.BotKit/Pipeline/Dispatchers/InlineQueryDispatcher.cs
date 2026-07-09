@@ -14,7 +14,7 @@ internal sealed class InlineQueryDispatcher(
     {
         var context = new InlineQueryContext(query);
 
-        // [Error Handler] -> [User Middleware 1] -> [User Middleware N] -> [Router]
+        // pipeline execution order is critical: handle errors, execute custom middlewares, run routing
         IInlineQueryMiddleware[] allSteps = [errorHandler, .. userMiddlewares, routerMiddleware];
 
         NextDelegate pipeline = () => Task.CompletedTask;

@@ -47,7 +47,7 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
     {
         var routeKey = context.VirtualRoute ?? context.Command;
 
-        // если команда в игнор листе, то выходим
+        // exit early if the command is in the ignore list
         if (_options.IgnoredCommands.Contains(context.Command, StringComparer.OrdinalIgnoreCase))
         {
             return;
@@ -56,7 +56,7 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
         if (!string.IsNullOrEmpty(context.TargetBotUsername)
             && !context.TargetBotUsername.Equals(_botInfo.Username, StringComparison.OrdinalIgnoreCase))
         {
-            // команда вообще не для нашего бота
+            // the command is not targeted at our bot
             return;
         }
 
@@ -71,7 +71,7 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
 
         if (_aliasMap.TryGetValue(routeKey, out var invokerAlias))
         {
-            // не нашли команду, но нашли алиас
+            // command was not found, but a matching alias was found
             context.MatchedInvoker = invokerAlias;
             context.MatchedCommandMetadata = new CommandMetadata(invokerAlias.HandlerType, invokerAlias.HandlerInstance);
 
@@ -79,14 +79,13 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
             return;
         }
 
-        // если роут виртуальный, значит его где-то присвоили, значит это команда для нас, но не найдена
-        // значит тут мы должны выбросить ошибку
+        // if the route is virtual, it was explicitly assigned elsewhere, meaning it targets our bot but was not found; throw an exception
         if (context.VirtualRoute is not null)
         {
             throw new VirtualRouteNotFoundException(context.Command, context.VirtualRoute);
         }
 
-        // ничего не нашли - ищем похожие команды
+        // no exact match found, search for similar command suggestions
         var similar = _searcher.FindSimilar(context.Command);
 
         if (similar.Count > 0)
@@ -94,13 +93,13 @@ internal sealed class CommandRoutingMiddleware : ICommandMiddleware
             throw new CommandSuggestionsException(context.Command, similar);
         }
 
-        // в приватных выбрасываем обычную ошибку
+        // throw a standard exception for private chats
         if (context.Message.Chat.Type == ChatType.Private)
         {
             throw new RouteNotFoundException(context.Command);
         }
 
-        // в остальных чатах игнорируем, вероятно не нам команда
+        // ignore in other chat types, as the command is likely intended for another bot
         return;
     }
 }

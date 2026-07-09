@@ -11,6 +11,6 @@ internal sealed class CommandExecutionMiddleware : ICommandMiddleware
             await context.MatchedInvoker.InvokeAsync(context, cancellationToken);
         }
 
-        // next() не вызываем, это конец пути
+        // do not invoke next() as this is the end of the pipeline
     }
 }

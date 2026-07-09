@@ -16,6 +16,12 @@ namespace Telegram.BotKit.Extensions;
 
 internal static class ServicesRegistrationExtention
 {
+    /// <summary>
+    /// Registers core Telegram.BotKit framework services, configurations, pipelines, and the <see cref="ITelegramBotClient"/> in the dependency injection container.
+    /// </summary>
+    /// <param name="services">The <see cref="IServiceCollection"/> to add services to.</param>
+    /// <param name="configuration">The configuration instance containing "TelegramBot" options.</param>
+    /// <returns>The <see cref="IServiceCollection"/> instance for method chaining.</returns>
     public static IServiceCollection AddTelegramBotFramework(this IServiceCollection services, IConfiguration configuration)
     {
         // bind and configure telegram bot options
@@ -44,7 +50,7 @@ internal static class ServicesRegistrationExtention
         services.TryAddTransient<IMessageErrorHandlerMiddleware, DefaultMessageErrorHandler>();
 
         // register default state middleware
-        services.TryAddTransient<IMessageStateMiddleware, DefaultUserStateMiddleware>();
+        services.TryAddTransient<IMessageStateMiddleware, DefaultMessageStateMiddleware>();
 
         // register dispatchers to orchestrate the pipeline for each update type
         services.AddTransient<ICommandDispatcher, CommandDispatcher>();

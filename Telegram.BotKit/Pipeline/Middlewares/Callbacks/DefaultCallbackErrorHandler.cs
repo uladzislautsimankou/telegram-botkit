@@ -5,6 +5,10 @@ using Telegram.BotKit.Exceptions;
 
 namespace Telegram.BotKit.Pipeline.Middlewares;
 
+/// <summary>
+/// A default implementation of <see cref="ICallbackErrorHandlerMiddleware"/> that provides
+/// global error handling during callback query execution, displaying alerts for validation failures or internal errors.
+/// </summary>
 internal class DefaultCallbackErrorHandler(
     ITelegramBotClient bot,
     ILogger<DefaultCallbackErrorHandler> logger
@@ -16,7 +20,7 @@ internal class DefaultCallbackErrorHandler(
         {
             await next();
         }
-        // в целом, тут если и есть ошибки, то это не пользователь виноват, так что просто разделим на "наши", и "не наши"
+        // differentiate between framework-specific validation/execution errors and unexpected internal exceptions
         catch (BotKitException ex)
         {
             logger.LogWarning(ex, "Callback validation failed for key '{Key}'. Params: {Params}",
@@ -42,9 +46,10 @@ internal class DefaultCallbackErrorHandler(
                 showAlert: true,
                 cancellationToken: ct);
         }
-        catch
+        catch (Exception ex)
         {
-            // не ответили и не ответили) может просто "query too old"
+            // log a warning since callback query answers frequently fail if the query expires (e.g., query too old)
+            logger.LogWarning(ex, "Failed to send callback error response for query '{QueryId}'. The query may have expired.", context.Query.Id);
         }
     }
 }

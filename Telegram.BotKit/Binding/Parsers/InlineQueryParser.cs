@@ -15,7 +15,7 @@ internal static class InlineQueryParser
         string key;
         string rawArgs;
 
-        // если пробелов нет, то у нас просто комманда без аргументов
+        // if there are no spaces, the query consists of only the key without arguments
         if (firstSpaceIndex == -1)
         {
             key = trimmed;
@@ -23,8 +23,8 @@ internal static class InlineQueryParser
         }
         else
         {
-            key = input[0..firstSpaceIndex]; // вызераем ключ
-            rawArgs = input[(firstSpaceIndex + 1)..]; // аругменты
+            key = input[0..firstSpaceIndex];            // extract the query key
+            rawArgs = input[(firstSpaceIndex + 1)..];   // extract raw arguments string
         }
 
         var parameters = ArgumentParser.ParseArgs(rawArgs);

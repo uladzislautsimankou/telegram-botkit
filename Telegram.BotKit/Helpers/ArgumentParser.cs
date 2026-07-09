@@ -4,10 +4,10 @@ namespace Telegram.BotKit.Helpers;
 
 internal static class ArgumentParser
 {
-    // Regex explanation:
-    // ([^\s=]+)="([^"]*)"  именованный с кавычками key="val val"   Group[1] = key, Group[2] = val val)
-    // "([^"]*)"            позиционный с кавычками "val val"       Group[3] = val val)
-    // (\S+)                обычный параметр val или key=val        Group[4] (или Value)
+    // regex explanation:
+    // ([^\s=]+)="([^"]*)"  named parameter with quotes key="val val" (Group[1] = key, Group[2] = val val)
+    // "([^"]*)"            positional parameter with quotes "val val" (Group[3] = val val)
+    // (\S+)                standard parameter val or key=val (Group[4] or raw Value)
     private static readonly Regex ArgsRegex = new(@"([^\s=]+)=""([^""]*)""|""([^""]*)""|(\S+)", RegexOptions.Compiled);
 
     public static List<string> ParseArgs(string rawArgs)
@@ -18,16 +18,17 @@ internal static class ArgumentParser
         return ArgsRegex.Matches(rawArgs)
             .Select(m =>
             {
-                // если key="val val"
-                // вырезаем из кавычек и склеиваем обратно в key=val val
+                // if the argument is a named parameter with quotes: key="val val"
+                // extract the value from the quotes and format it back as key=val val
                 if (m.Groups[1].Success)
                     return $"{m.Groups[1].Value}={m.Groups[2].Value}";
 
-                // если просто кавычки
+                // if it is a positional parameter with quotes: "val val"
+                // extract the inner unquoted string
                 if (m.Groups[3].Success)
                     return m.Groups[3].Value;
 
-                // Иначе берем просто слово
+                // otherwise, add the entire matched plain word (e.g., val or key=val)
                 return m.Value;
             })
             .ToList();

@@ -15,7 +15,7 @@ internal class InlineQueryRoutingMiddleware(
     {
         if (!_handlerMap.TryGetValue(context.Key, out var invoker))
         {
-            //коллбэк не нашли
+            // inline query handler not found
             throw new RouteNotFoundException(context.Key);
         }
 
