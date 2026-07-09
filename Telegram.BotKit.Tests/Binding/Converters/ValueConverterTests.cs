@@ -3,7 +3,7 @@ using Telegram.BotKit.Binding.Converters;
 
 namespace Telegram.BotKit.Tests.Binding.Converters;
 
-public partial class ValueConverterTests
+public sealed partial class ValueConverterTests
 {
     private class NoConverterType { }
 

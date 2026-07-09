@@ -1,36 +1,55 @@
-﻿using Telegram.BotKit.Tests.Shared;
+﻿using FluentAssertions;
+using Telegram.BotKit.Tests.Shared;
 
 namespace Telegram.BotKit.Tests.Binding.Converters;
 
-public partial class ValueConverterTests
+public sealed partial class ValueConverterTests
 {
+    // verifies that valid enum string names or numerical values can be converted to the enum type
     [Theory]
     [InlineData("First", TestEnum.First)]
     [InlineData("second", TestEnum.Second)]
     [InlineData("1", TestEnum.First)]
-    public void Convert_ShouldParseEnum_ValidValues(string input, object expected)
+    public void TryConvert_WhenEnumMemberIsValid_ShouldConvertSuccessfully(string input, object expected)
     {
-        var success = _converter.TryConvert(input, typeof(TestEnum), out var result);
+        // arrange
+        var targetType = typeof(TestEnum);
 
-        Assert.True(success);
-        Assert.Equal(expected, result);
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().Be(expected);
     }
 
+    // verifies that an undefined enum numerical value throws a format exception
     [Fact]
-    public void Convert_ShouldThrow_WhenEnumNumberDoesNotExist()
+    public void TryConvert_WhenEnumIntIsUndefined_ShouldThrowFormatException()
     {
-        Assert.Throws<FormatException>(() =>
-        {
-            _converter.TryConvert("99", typeof(TestEnum), out _);
-        });
+        // arrange
+        var undefinedValue = "99";
+        var targetType = typeof(TestEnum);
+
+        // act
+        var act = () => _converter.TryConvert(undefinedValue, targetType, out _);
+
+        // assert
+        act.Should().Throw<FormatException>();
     }
 
+    // verifies that parsing an invalid string value for a nullable enum throws a format exception
     [Fact]
-    public void Convert_ShouldThrow_WhenNullableEnumIsInvalid()
+    public void TryConvert_WhenNullableEnumStringIsInvalid_ShouldThrowFormatException()
     {
-        Assert.Throws<FormatException>(() =>
-        {
-            _converter.TryConvert("invalid_text", typeof(TestEnum?), out _);
-        });
+        // arrange
+        var invalidValue = "invalid_text";
+        var targetType = typeof(TestEnum?);
+
+        // act
+        var act = () => _converter.TryConvert(invalidValue, targetType, out _);
+
+        // assert
+        act.Should().Throw<FormatException>();
     }
 }

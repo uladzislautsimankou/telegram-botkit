@@ -5,7 +5,7 @@ internal static class CallbackParser
     // format: callbackKey?param1=val1&paramN=valN
     public static (string Key, Dictionary<string, string> Parameters) Parse(string? data)
     {
-        if (string.IsNullOrEmpty(data))
+        if (string.IsNullOrWhiteSpace(data))
             return (string.Empty, new Dictionary<string, string>());
 
         // limit the split to 2 parts: [0] = "callbackKey", [1] = "param1=val1&paramN=valN"

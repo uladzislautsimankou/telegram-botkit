@@ -1,51 +1,71 @@
-﻿using Telegram.BotKit.Helpers;
+﻿using FluentAssertions;
+using Telegram.BotKit.Helpers;
 
 namespace Telegram.BotKit.Tests.Helpers;
 
-public class CommandSearcherTests
+public sealed class CommandSearcherTests
 {
-    private readonly CommandSearcher _searcher = new CommandSearcher([
+    private readonly CommandSearcher _searcher = new([
         "/ping",
         "/bday_check",
         "/weather_minsk"
     ]);
 
+    // verifies that typo variations of a short command like /ping are correctly matched
     [Theory]
-    [InlineData("png", "/ping")]           // пропуск буквы
-    [InlineData("pnig", "/ping")]          // перестановка букв
-    [InlineData("pingg", "/ping")]         // лишняя буква
-    [InlineData("pibg", "/ping")]          // опечатка (n -> b)
-    [InlineData("/ping", "/ping")]         // точное совпадение
-    public void Should_Find_Ping_Variations(string input, string expected)
+    [InlineData("png", "/ping")]           // missing letter
+    [InlineData("pnig", "/ping")]          // swapped letters
+    [InlineData("pingg", "/ping")]         // extra letter
+    [InlineData("pibg", "/ping")]          // typo
+    [InlineData("/ping", "/ping")]         // exact match
+    public void FindSimilar_WhenPingVariationsAreQueried_ShouldReturnPing(string input, string expected)
     {
+        // arrange & act
         var result = _searcher.FindSimilar(input);
-        Assert.Contains(expected, result);
+
+        // assert
+        result.Should().Contain(expected);
     }
 
+    // verifies that shuffled words and typo variations of /bday_check are correctly resolved
     [Theory]
-    [InlineData("check_bday", "/bday_check")]   // перестановка слов
-    [InlineData("chek_bday", "/bday_check")]    // перестановка слов + опечатка
-    [InlineData("checkbday", "/bday_check")]    // забыли подчеркивание
-    [InlineData("bdaycheck", "/bday_check")]    // слитно
-    [InlineData("bday_chek", "/bday_check")]    // опечатка
-    public void Should_Find_BdayCheck_Variations(string input, string expected)
+    [InlineData("check_bday", "/bday_check")]   // reversed words
+    [InlineData("chek_bday", "/bday_check")]    // reversed words with typo
+    [InlineData("checkbday", "/bday_check")]    // missing underscore
+    [InlineData("bdaycheck", "/bday_check")]    // concatenated words
+    [InlineData("bday_chek", "/bday_check")]    // typo
+    public void FindSimilar_WhenBdayCheckVariationsAreQueried_ShouldReturnBdayCheck(string input, string expected)
     {
+        // arrange & act
         var result = _searcher.FindSimilar(input);
-        Assert.Contains(expected, result);
+
+        // assert
+        result.Should().Contain(expected);
     }
 
+    // verifies that typing an incomplete prefix of a long command matches successfully
     [Theory]
-    [InlineData("wether", "/weather_minsk")]    // не дописали
-    public void Should_Find_Long_Command_Variations(string input, string expected)
+    [InlineData("wether", "/weather_minsk")]    // incomplete prefix
+    public void FindSimilar_WhenLongCommandPrefixIsQueried_ShouldReturnCommand(string input, string expected)
     {
+        // arrange & act
         var result = _searcher.FindSimilar(input);
-        Assert.Contains(expected, result);
+
+        // assert
+        result.Should().Contain(expected);
     }
 
+    // verifies that completely unrecognized strings return no suggested matches
     [Fact]
-    public void Should_Return_Empty_For_Total_Nonsense()
+    public void FindSimilar_WhenNonsenseInputIsProvided_ShouldReturnEmpty()
     {
-        var result = _searcher.FindSimilar("some_random_command");
-        Assert.Empty(result);
+        // arrange
+        var nonsenseInput = "some_random_command";
+
+        // act
+        var result = _searcher.FindSimilar(nonsenseInput);
+
+        // assert
+        result.Should().BeEmpty();
     }
 }
