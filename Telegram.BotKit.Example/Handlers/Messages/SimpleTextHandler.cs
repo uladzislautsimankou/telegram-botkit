@@ -1,7 +1,7 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Extensions;
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
 
 namespace Telegram.BotKit.Example.Handlers.Messages;
 
@@ -26,10 +26,10 @@ internal sealed class SimpleTextHandler(ITelegramBotClient bot) : IMessageHandle
         if (string.IsNullOrWhiteSpace(replyText))
             replyText = "You didn't say anything";
 
-        await bot.ReplyMessage(
-            context: context,
+        await bot.SendMessage(
+            chatId: context.Message.Chat.Id,
             text: replyText,
-            cancellationToken: cancellationToken
-        );
+            replyParameters: context.Message.Id,
+            cancellationToken: cancellationToken);
     }
 }

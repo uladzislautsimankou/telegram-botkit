@@ -1,7 +1,8 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
 
 namespace Telegram.BotKit.Example.Handlers.Messages;
 

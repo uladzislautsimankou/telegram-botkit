@@ -1,7 +1,10 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
-using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Callbacks.Abstractions;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.InlineQueries.Abstractions;
+using Telegram.BotKit.Messages.Abstractions;
 
 namespace Telegram.BotKit.Example.Services;
 

@@ -1,4 +1,6 @@
-﻿using Telegram.BotKit.Abstractions;
+﻿using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Models;
+using Telegram.BotKit.Shared;
 
 namespace Telegram.BotKit.Example.Middlewares;
 
@@ -11,7 +13,7 @@ internal sealed class SimpleCommandLogMiddleware(ILogger<SimpleCommandLogMiddlew
     public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         logger.LogInformation("Middleware: Processing command '/{Command}' from User {UserId}",
-            context.Command, context.From.Id);
+            context.Command, context.Message.From?.Id);
 
         // delegate to next step
         await next();

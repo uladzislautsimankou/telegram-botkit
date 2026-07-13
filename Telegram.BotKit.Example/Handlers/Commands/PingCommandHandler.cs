@@ -1,9 +1,10 @@
 ﻿using Telegram.Bot;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Attributes;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Attributes;
+using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Example.Constants;
-using Telegram.BotKit.Extensions;
 
 namespace Telegram.BotKit.Example.Handlers.Commands;
 
@@ -45,6 +46,12 @@ internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandl
         );
 
         // reply using the framework extension method
-        await bot.ReplyMessage(context, responseText, keyboard, cancellationToken: cancellationToken);
+        await bot.SendMessage(
+            chatId: context.Message.Chat.Id,
+            text: responseText,
+            replyParameters: context.Message.Id,
+            replyMarkup: keyboard,
+            parseMode: ParseMode.Html,
+            cancellationToken: cancellationToken);
     }
 }

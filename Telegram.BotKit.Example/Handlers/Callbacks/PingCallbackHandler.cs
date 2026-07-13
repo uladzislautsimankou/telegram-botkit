@@ -1,6 +1,7 @@
 ﻿using System.Text.Json.Serialization;
 using Telegram.Bot;
 using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Example.Constants;
 
 namespace Telegram.BotKit.Example.Handlers.Callbacks;

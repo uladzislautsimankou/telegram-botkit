@@ -1,7 +1,9 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Models;
+using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Example.Middlewares;
 
@@ -11,7 +13,7 @@ namespace Telegram.BotKit.Example.Middlewares;
 internal sealed class MyCustomCommandErrorHandler(
     ITelegramBotClient bot,
     ILogger<MyCustomCommandErrorHandler> logger
-    ) : ICommandErrorHandlerMiddleware
+    ) : ICommandMiddleware
 {
     public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {

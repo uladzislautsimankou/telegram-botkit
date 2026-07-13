@@ -4,8 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Telegram.BotKit.Configuration;
-using Telegram.BotKit.Extensions;
+using Microsoft.Extensions.Options;
+using Telegram.Bot;
+using Telegram.Bot.Polling;
+using Telegram.Bot.Types;
 using Telegram.BotKit.Hosting.Background;
 using Telegram.BotKit.Hosting.Webhook;
 
@@ -25,27 +27,27 @@ public sealed class BotBuilder
     /// <summary>
     /// Gets the service collection to register application services.
     /// </summary>
-    public IServiceCollection Services => _hostBuilder?.Services ?? _webBuilder!.Services;
+    public IServiceCollection Services => _hostBuilder is not null ? _hostBuilder.Services : _webBuilder!.Services;
 
     /// <summary>
     /// Gets the configuration manager for accessing application settings (appsettings.json, environment variables, etc.).
     /// </summary>
-    public IConfigurationManager Configuration => _hostBuilder?.Configuration ?? _webBuilder!.Configuration;
+    public IConfigurationManager Configuration => _hostBuilder is not null ? _hostBuilder.Configuration : _webBuilder!.Configuration;
 
     /// <summary>
     /// Gets information about the hosting environment (e.g., Development or Production).
     /// </summary>
-    public IHostEnvironment Environment => _hostBuilder?.Environment ?? _webBuilder!.Environment;
+    public IHostEnvironment Environment => _hostBuilder is not null ? _hostBuilder.Environment : _webBuilder!.Environment;
 
     /// <summary>
     /// Gets the logging builder for configuring logging providers and filters.
     /// </summary>
-    public ILoggingBuilder Logging => _hostBuilder?.Logging ?? _webBuilder!.Logging;
+    public ILoggingBuilder Logging => _hostBuilder is not null ? _hostBuilder.Logging : _webBuilder!.Logging;
 
     /// <summary>
     /// Gets the metrics builder for configuring OpenTelemetry and other metrics.
     /// </summary>
-    public IMetricsBuilder Metrics => _hostBuilder?.Metrics ?? _webBuilder!.Metrics;
+    public IMetricsBuilder Metrics => _hostBuilder is not null ? _hostBuilder.Metrics : _webBuilder!.Metrics;
 
     /// <summary>
     /// Gets the underlying <see cref="HostApplicationBuilder"/> if running in Polling mode.
@@ -70,7 +72,7 @@ public sealed class BotBuilder
 
         // Build a temporary configuration to read the 'TelegramBot' settings before creating the actual host.
         var preConfig = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
+            .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .AddJsonFile($"appsettings.{envName}.json", optional: true, reloadOnChange: true)
             .AddEnvironmentVariables()
@@ -90,8 +92,6 @@ public sealed class BotBuilder
             };
 
             _webBuilder = WebApplication.CreateBuilder(webOptions);
-
-            _webBuilder.Services.AddControllers();
         }
         else
         {
@@ -130,9 +130,20 @@ public sealed class BotBuilder
         if (_mode == BotMode.Webhook)
         {
             var app = _webBuilder!.Build();
+            var opts = app.Services.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
 
-            // Map controllers to handle incoming Telegram updates via HTTP POST.
-            app.MapControllers();
+            // Dynamically extract the path from the full WebhookUrl configuration
+            var routePath = "/api/bot";
+            if (Uri.TryCreate(opts.WebhookUrl, UriKind.Absolute, out var webhookUri))
+            {
+                routePath = webhookUri.AbsolutePath;
+            }
+
+            app.MapPost(routePath, async (Update update, IUpdateHandler updateHandler, ITelegramBotClient botClient, CancellationToken ct) =>
+            {
+                await updateHandler.HandleUpdateAsync(botClient, update, ct);
+                return Microsoft.AspNetCore.Http.Results.Ok();
+            });
 
             host = app;
         }

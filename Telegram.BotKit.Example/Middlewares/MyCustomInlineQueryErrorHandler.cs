@@ -1,7 +1,9 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Types.InlineQueryResults;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.InlineQueries.Abstractions;
+using Telegram.BotKit.InlineQueries.Models;
+using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Example.Middlewares;
 
@@ -12,7 +14,7 @@ namespace Telegram.BotKit.Example.Middlewares;
 internal sealed class MyCustomInlineQueryErrorHandler(
     ITelegramBotClient bot,
     ILogger<MyCustomInlineQueryErrorHandler> logger
-    ) : IInlineQueryErrorHandlerMiddleware
+    ) : IInlineQueryMiddleware
 {
     public async Task InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
@@ -25,7 +27,7 @@ internal sealed class MyCustomInlineQueryErrorHandler(
             // user typed an unmatched query or just opened the inline input.
             // we answer with empty results to stop the perpetual loading spinner in Telegram.
             await bot.AnswerInlineQuery(
-                inlineQueryId: context.Id,
+                inlineQueryId: context.Query.Id,
                 results: Array.Empty<InlineQueryResult>(),
                 cancellationToken: cancellationToken
             );

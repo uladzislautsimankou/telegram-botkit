@@ -5,13 +5,13 @@
 
 **A structured, extensible .NET 10 framework for building Telegram bots.**
 
-Built on top of the popular [Telegram.Bot](https://github.com/TelegramBots/Telegram.Bot) library, adopting **ASP.NET Core** principles: strong typing, Dependency Injection, and a highly customizable Middleware Pipeline.
+Built on top of the popular [Telegram.Bot](https://github.com/TelegramBots/Telegram.Bot) library, adopting ASP.NET Core principles: Dependency Injection, strong typing, and highly customizable, modular middleware pipelines.
 
 ---
 
 ## 🏗 Architecture
 
-The framework decouples input parsing, routing, and processing. Every incoming update flows through an isolated execution pipeline:
+The framework decouples input parsing, routing, and processing. Every incoming update flows through an isolated, scoped execution pipeline:
 
 ```mermaid
 graph TD
@@ -19,272 +19,117 @@ graph TD
     
     %% Command Flow
     Handler -- "Message starts with /" --> CmdDisp[Command Dispatcher]
-    CmdDisp --> CmdPipe[Pipeline: ErrorHandler -> Routing -> User Middlewares -> Execution]
-    CmdPipe -- "Uses CommandSearcher" --> CmdRouter[Command Router]
-    CmdRouter -- "ParameterBinderBase" --> CmdInvoker[Command Invoker]
-    CmdInvoker --> CmdHandler[ICommandHandler]
+    CmdDisp --> CmdPipe[Pipeline: User Middlewares? -> Routing -> User Middlewares? -> Execution]
+    CmdPipe --> CmdRouter[Command Routing Middleware]
+    CmdRouter -- "Lazy lookup" --> CmdReg{CommandHandlerRegistry}
+    CmdReg -- "Uses cached CommandSearcher" --> CmdInvoker[Command Invoker]
+    CmdInvoker -- "ParameterBinderBase (cached metadata)" --> CmdHandler[ICommandHandler]
     
     %% Callback Flow
     Handler -- Callback Query --> CbkDisp[Callback Dispatcher]
-    CbkDisp --> CbkPipe[Pipeline: ErrorHandler -> User Middlewares -> Routing]
-    CbkPipe --> CbkRouter[Callback Router]
-    CbkRouter -- "CallbackParameterBinder" --> CbkInvoker[Callback Invoker]
-    CbkInvoker --> CbkHandler[ICallbackHandler]
+    CbkDisp --> CbkPipe[Pipeline: User Middlewares? -> Routing -> User Middlewares? -> Execution]
+    CbkPipe --> CbkRouter[Callback Routing Middleware]
+    CbkRouter -- "Lazy lookup" --> CbkReg{CallbackHandlerRegistry}
+    CbkReg --> CbkInvoker[Callback Invoker]
+    CbkInvoker -- "CallbackParameterBinder (cached properties)" --> CbkHandler[ICallbackHandler]
 
     %% Inline Query Flow
     Handler -- Inline Query --> InlDisp[Inline Query Dispatcher]
-    InlDisp --> InlPipe[Pipeline: ErrorHandler -> User Middlewares -> Routing]
-    InlPipe --> InlRouter[Inline Query Router]
-    InlRouter -- "InlineQueryParameterBinder" --> InlInvoker[Inline Query Invoker]
-    InlInvoker --> InlHandler[IInlineQueryHandler]
+    InlDisp --> InlPipe[Pipeline: User Middlewares? -> Routing]
+    InlPipe --> InlRouter[Inline Query Routing Middleware]
+    InlRouter -- "Evaluates CanHandle" --> InlExec{Handler Match Count}
+    InlExec -- "Single match (Hot path)" --> InlDirect[Direct execution without tasks]
+    InlExec -- "Multiple matches" --> InlParallel[Parallel concurrent execution]
+    InlDirect --> InlHandler[IInlineQueryHandler]
+    InlParallel --> InlHandler
 
     %% Message Flow
     Handler -- Regular Message --> MsgDisp[Message Dispatcher]
-    MsgDisp --> MsgPipe[Pipeline: ErrorHandler -> StateMiddleware -> Routing -> User Middlewares -> Execution]
-    MsgPipe --> MsgRouter[Message Router]
-    MsgRouter -- "State-aware matching" --> MsgHandler[IMessageHandler]
+    MsgDisp --> MsgPipe[Pipeline: StateMiddleware? -> Routing -> User Middlewares? -> Execution]
+    MsgPipe --> MsgRouter[Message Routing Middleware]
+    MsgRouter -- "State-specific lookup" --> MsgReg{MessageHandlerRegistry}
+    MsgReg --> MsgHandler[IMessageHandler]
+```
+---
+
+## ✨ Key Features
+
+*   **🧠 Typo Correction:** Integrated Command Searcher powered by the **Damerau-Levenshtein** algorithm to suggest the closest registered commands to users.
+*   **🛠 Strongly-Typed Parameter Binding:** Automatic mapping of URL-like query strings (`action?id=12`) and space-separated parameters into your custom DTOs.
+*   **🚇 Modular Middleware Pipelines:** Separate, highly configurable pipelines for Commands, Callbacks, Inline Queries, and standard Messages. 
+*   **🎯 Lazy Scoped Dependency Resolution:** Resolves **only the matched handler** per request instead of instating the entire handler collection, optimizing memory and DI scope lifetimes.
+*   **🌐 Flexible Hosting Modes:** Automatically configures Long Polling or secure Webhook deployments. In Webhook mode, endpoints are dynamically mapped based on the configured Webhook URL using ASP.NET Core Minimal APIs.
+
+---
+
+## 🚀 Quick Start (Long Polling & Webhook)
+
+### 1. Install NuGet Package
+```bash
+dotnet add package Telegram.BotKit
+```
+
+### 2. Configure Settings (`appsettings.json`)
+The framework automatically chooses between Polling and Webhook modes based on the `Mode` setting.
+```json
+{
+  "TelegramBot": {
+    "Token": "YOUR_BOT_TOKEN_HERE",
+    "AllowedUpdates": [ "Message", "CallbackQuery"... ],
+    "Mode": "Polling" // Or "Webhook"
+  }
+}
+```
+
+### 3. Initialize the Application (`Program.cs`)
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Telegram.BotKit.Hosting;
+
+var builder = BotApplication.CreateBuilder(args);
+
+// Simple default setup - scans the calling assembly and sets up default pipelines
+builder.Services
+    .AddCommands()
+    .AddCallbacks()
+    .AddMessages()
+    .AddInlineQueries();
+
+builder.Services.AddSingleton<IUpdateHandler, YourUpdateHandler>();
+
+var app = builder.Build();
+await app.RunAsync();
 ```
 
 ---
 
-## ✨ Features
+## 🚇 Pipeline Customization
 
-*   **⚡ Zero-Allocation Parameter Parsing:** Uses `ReadOnlySpan<char>` and Regex source generators to parse positional and named arguments (`key="value"`) with minimal GC pressure.
-*   **🧠 Intelligent Typo Correction:** Integrated Command Searcher powered by **Damerau-Levenshtein distance** (with transposition, prefix, and sorted-character matching) to suggest correct commands if a user makes a typo.
-*   **🛠 Strongly-Typed Parameter Binding:**
-    *   **Commands:** Automatic binding to DTOs via `[CommandParam]` by position, name, or requirement constraint.
-    *   **Callback Queries:** Automatic mapping of URL-like query strings (`action?id=12&confirm=true`) to properties using `[JsonPropertyName]`.
-    *   **Inline Queries:** Fast parameter binding from input queries.
-*   **🔄 Stateful Dialog Flows:** Route plain messages dynamically using `IMessageStateMiddleware` and state-bound handlers (`IMessageHandler.RequiredState`).
-*   **🚇 Middleware Pipeline:** Separate pipelines for Commands, Callbacks, Inline Queries, and standard Messages. Register custom logging, rate-limiting, or authorization steps.
-
----
-
-## 🔄 Stateful Dialogs (FSM)
-
-A common bot pattern: a user triggers a flow (e.g., clicks a button or types `/setage`), the system expects a text answer next, and we route that specific text to a designated state-bound handler.
-
-This is achieved using **UserState**, **State Middleware**, and **State-specific Handlers**:
-
-```
-[ User sends "/setage" ] ──> CommandHandler updates State to "awaiting_age" in Cache/DB
-                                        │
-[ User sends "25" ]      ──> StateMiddleware loads "awaiting_age" -> Assigns to context.UserState
-                                        │
-                             Router matches handler with RequiredState == "awaiting_age"
-```
-
-### 1. The State Storage abstraction (Example)
+You can explicitly control the execution order of the pipelines. This is useful when you want to run global middlewares **before** the routing occurs (e.g., logging or rate-limiting) and other middlewares **after** the routing (e.g., role-based access validation).
 
 ```csharp
-public interface IStateStorage
+builder.Services.AddCommands(pipeline =>
 {
-    Task<string?> GetStateAsync(long userId);
-    Task SetStateAsync(long userId, string? state);
-}
-```
+    // 1. Run global logging for all incoming command attempts
+    pipeline.UseMiddleware<CommandLoggingMiddleware>();
 
-### 2. State-Resolving Middleware (`IMessageStateMiddleware`)
+    // 2. Route the command (matches input to a concrete ICommandHandler)
+    pipeline.UseRouting();
 
-Before routing standard messages, this middleware fetches the current conversational state of the sender and assigns it to `context.UserState`.
-
-```csharp
-using Telegram.BotKit;
-using Telegram.BotKit.Abstractions;
-
-namespace MyBot.Middlewares;
-
-public sealed class UserStateMiddleware(IStateStorage stateStorage) : IMessageStateMiddleware
-{
-    public async Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
-    {
-        var userId = context.Message.From?.Id;
-        if (userId is not null)
-        {
-            // Retrieve current state from cache/database and bind to context
-            context.UserState = await stateStorage.GetStateAsync(userId.Value);
-        }
-
-        await next();
-    }
-}
-```
-
-### 3. Step 1: Initiating State via Command
-
-```csharp
-public sealed class SetAgeCommandHandler(IStateStorage stateStorage) : ICommandHandler<NoParams>
-{
-    public string Command => "setage";
-    public string[] Aliases => [];
-
-    public async Task HandleAsync(NoParams parameters, CommandContext context, CancellationToken cancellationToken)
-    {
-        // 1. Set the conversation state to "awaiting_age"
-        await stateStorage.SetStateAsync(context.From.Id, "awaiting_age");
-
-        // 2. Prompt user for input
-        await context.Message.ReplyAsync("Please enter your age:", cancellationToken);
-    }
-}
-```
-
-### 4. Step 2: Processing and Resetting State via Message Handler
-
-```csharp
-using Telegram.BotKit;
-using Telegram.BotKit.Abstractions;
-
-namespace MyBot.Messages;
-
-public sealed class AgeInputHandler(IStateStorage stateStorage) : IMessageHandler
-{
-    // Activated only if UserState matches "awaiting_age"
-    public string? RequiredState => "awaiting_age";
-
-    public bool CanHandle(MessageContext context) => 
-        !string.IsNullOrWhiteSpace(context.Message.Text);
-
-    public async Task HandleAsync(MessageContext context, CancellationToken cancellationToken)
-    {
-        var input = context.Message.Text!;
-        var userId = context.Message.From!.Id;
-
-        if (int.TryParse(input, out var age) && age is > 0 and < 120)
-        {
-            // Process valid input, save to DB...
-            
-            // Clear conversational state to exit the input loop
-            await stateStorage.SetStateAsync(userId, null);
-            await context.Message.ReplyAsync($"Age saved successfully: {age}!", cancellationToken);
-        }
-        else
-        {
-            // Validation failed: keep the state active and prompt again
-            await context.Message.ReplyAsync("Invalid input. Please enter a valid number (1-120):", cancellationToken);
-        }
-    }
-}
+    // 3. Run middleware only for recognized commands (e.g., ensure user is an administrator)
+    pipeline.UseMiddleware<AdminOnlyMiddleware>();
+});
 ```
 
 ---
 
-## 📦 Core Usage Examples
+## 📖 Detailed Reference & Code Examples
 
-### 1. Strongly-Typed Commands (`ICommandHandler`)
+For full implementation examples, including:
+* Writing strongly-typed **Commands** & **Callbacks**
+* Handling raw **Messages**
+* Implementing **Stateful Dialogs (Finite State Machine / Wizard Flows)**
+* Processing **Inline Queries** with dynamic routing
+* Implementing a custom **Update Handler**
 
-Define your parameter DTO using `[CommandParam]` attributes.
-
-```csharp
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Attributes;
-
-namespace MyBot.Commands;
-
-public sealed record DuelParams
-{
-    [CommandParam(Position = 0, Required = true)]
-    public string OpponentName { get; init; } = default!;
-
-    [CommandParam(Name = "rounds", Position = 1)]
-    public int Rounds { get; init; } = 3;
-}
-
-public sealed class DuelCommandHandler : ICommandHandler<DuelParams>
-{
-    public string Command => "duel";
-    public string[] Aliases => ["fight", "battle"];
-
-    public async Task HandleAsync(DuelParams parameters, CommandContext context, CancellationToken cancellationToken)
-    {
-        // bound value example: /duel @alex rounds=5
-        await context.Message.ReplyAsync(
-            $"Initiating duel against {parameters.OpponentName} for {parameters.Rounds} rounds!",
-            cancellationToken
-        );
-    }
-}
-```
-
-### 2. Inline Keyboard Callbacks (`ICallbackHandler`)
-
-Map query-like parameters (`game_move?x=2&y=1`) directly to properties.
-
-```csharp
-using System.Text.Json.Serialization;
-using Telegram.BotKit;
-using Telegram.BotKit.Abstractions;
-
-namespace MyBot.Callbacks;
-
-public sealed record MoveParams
-{
-    [JsonPropertyName("x")]
-    public int X { get; init; }
-
-    [JsonPropertyName("y")]
-    public int Y { get; init; }
-}
-
-public sealed class MoveCallbackHandler : ICallbackHandler<MoveParams>
-{
-    public string Key => "game_move";
-
-    public async Task HandleAsync(MoveParams parameters, CallbackContext context, CancellationToken cancellationToken)
-    {
-        var text = $"You played at coordinates: X = {parameters.X}, Y = {parameters.Y}";
-        await context.Message.UpdateTextAsync(text, cancellationToken);
-    }
-}
-```
-
-### 3. Custom Middleware Integration
-
-Inject custom logic globally into the command processing pipeline.
-
-```csharp
-using Telegram.BotKit;
-using Telegram.BotKit.Abstractions;
-
-namespace MyBot.Middlewares;
-
-public sealed class CommandLoggingMiddleware(ILogger<CommandLoggingMiddleware> logger) : ICommandMiddleware
-{
-    public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
-    {
-        logger.LogInformation("Executing command /{Command} sent by {UserId}", context.Command, context.From.Id);
-        await next();
-    }
-}
-```
-
----
-
-## 🛠 Advanced Features: Command Suggestions
-
-If a user enters `/stert`, the integrated `CommandSearcher` analyzes the registered command index. Rather than failing silently, the routing engine throws a `CommandSuggestionsException` containing similar candidates using an optimized **Damerau-Levenshtein** algorithm:
-
-```csharp
-// Catches /stert and yields suggestions like: ["start", "set"]
-try
-{
-    await _dispatcher.DispatchAsync(message);
-}
-catch (CommandSuggestionsException ex)
-{
-    var suggestionList = string.Join(", ", ex.Suggestions.Select(s => $"/{s}"));
-    await client.SendMessageAsync(
-        chatId: message.Chat.Id,
-        text: $"Unknown command. Did you mean: {suggestionList}?"
-    );
-}
-```
-
----
-
-## 🚀 Getting Started
-
-Check out the complete, runnable reference implementation in the [📂 Telegram.BotKit.Example](Telegram.BotKit.Example) directory, containing:
-*   Pipeline configuration
-*   Long polling vs Webhook setup
-*   Complex multi-step Wizard flow implementations
+👉 **Check out the [📂 Telegram.BotKit.Example Documentation](Telegram.BotKit.Example/README.md)**

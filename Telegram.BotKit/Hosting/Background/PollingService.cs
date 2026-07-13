@@ -4,8 +4,7 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Configuration;
-using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Hosting.Background;
 
@@ -44,9 +43,10 @@ internal sealed class PollingService(
             logger.LogWarning("Could not delete webhook: {Message}", ex.Message);
         }
 
-        var allowedUpdates = options.Value.AllowedUpdates
-            .Select(x => Enum.Parse<UpdateType>(x, true))
-            .ToArray();
+        // Null: Keep previous settings. Array.Empty: Reset to Telegram defaults.
+        var allowedUpdates = options.Value.AllowedUpdates is not null
+            ? options.Value.AllowedUpdates.Select(x => Enum.Parse<UpdateType>(x, true)).ToArray()
+            : null;
 
         var receiverOptions = new ReceiverOptions
         {

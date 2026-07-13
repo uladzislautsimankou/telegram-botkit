@@ -1,79 +1,170 @@
-# Telegram.BotKit Example
+# Telegram.BotKit Developer Manual & Reference 🚀
 
-A console reference application demonstrating the capabilities, routing mechanics, and parameter-binding architecture of the framework.
-
-## 📦 Installation
-
-To use the framework in your own project, install the NuGet package:
-
-```bash
-dotnet add package Telegram.BotKit
-```
-
-## ▶️ How to Run
-
-*   Open `appsettings.json`.
-*   Insert your bot token inside the `TelegramBot` configuration block:
-    ```json
-    {
-      "TelegramBot": {
-        "Token": "YOUR_BOT_TOKEN_HERE"
-      }
-    }
-    ```
-*   Ensure that the `appsettings.json` file is configured to copy to the output directory (Copy if Newer).
-*   Run the project.
+A comprehensive guide demonstrating the capabilities, routing mechanics, parameter-binding, and stateful dialog architecture of the framework.
 
 ---
 
-## Creating a Command
+## ▶️ How to Run the Example Project
+
+The example project comes pre-configured with sample handlers and pipelines.
+
+1. Open `appsettings.json`.
+2. Insert your bot token inside the `TelegramBot` configuration block:
+   ```json
+   {
+     "TelegramBot": {
+       "Token": "YOUR_BOT_TOKEN_HERE"
+     }
+   }
+   ```
+3. Run the project from your terminal:
+   ```bash
+   dotnet run
+   ```
+
+---
+
+## 🛠 Unified Registration & Routing (`Program.cs`)
+
+This is what the application's entry point looks like. You **must** register an implementation of `IUpdateHandler` (provided by the `Telegram.Bot` library) in your DI container. This handler is injected into the background services to dispatch raw updates into the framework's specific pipelines.
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Telegram.Bot.Polling;
+using Telegram.BotKit.Hosting;
+using MyBot.Handlers;
+
+var builder = BotApplication.CreateBuilder(args);
+
+// 1. Register Pipelines (automatically scans the calling assembly for handlers)
+builder.Services
+    .AddCommands()
+    .AddCallbacks()
+    .AddMessages()
+    .AddInlineQueries();
+
+// 2. Register your custom Update Handler (Crucial for routing raw updates to dispatchers)
+builder.Services.AddSingleton<IUpdateHandler, BotUpdateHandler>();
+
+var app = builder.Build();
+await app.RunAsync();
+```
+
+### Reference: Minimal `BotUpdateHandler` Implementation
+
+Your update handler acts as a traffic router. It determines which dispatcher should process the incoming update based on its type.
+
+```csharp
+using Telegram.Bot;
+using Telegram.Bot.Polling;
+using Telegram.Bot.Types;
+using Telegram.BotKit.Callbacks.Abstractions;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.InlineQueries.Abstractions;
+using Telegram.BotKit.Messages.Abstractions;
+
+namespace MyBot.Handlers;
+
+public sealed class BotUpdateHandler(
+    ICommandDispatcher commandDispatcher,
+    ICallbackDispatcher callbackDispatcher,
+    IMessageDispatcher messageDispatcher,
+    IInlineQueryDispatcher inlineQueryDispatcher
+    ) : IUpdateHandler
+{
+    public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+    {
+        if (update.Message is { } message)
+        {
+            if (message.Text is { } text && text.StartsWith('/'))
+            {
+                await commandDispatcher.DispatchAsync(message, cancellationToken);
+            }
+            else
+            {
+                await messageDispatcher.DispatchAsync(message, cancellationToken);
+            }
+        }
+        else if (update.CallbackQuery is { } callbackQuery)
+        {
+            await callbackDispatcher.DispatchAsync(callbackQuery, cancellationToken);
+        }
+        else if (update.InlineQuery is { } inlineQuery)
+        {
+            await inlineQueryDispatcher.DispatchAsync(inlineQuery, cancellationToken);
+        }
+    }
+
+    public Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, HandleErrorSource source, CancellationToken cancellationToken)
+    {
+        // Handle global network or API errors here
+        return Task.CompletedTask;
+    }
+}
+```
+
+---
+
+## 💬 Creating a Command (`ICommandHandler`)
 
 Configure a parameter model and declare your command trigger.
 
-### Define the DTO (Parameters)
+### 1. Define the DTO (Parameters)
 
 Describe the positional or named arguments your command accepts.
 
 ```csharp
+using Telegram.BotKit.Commands.Attributes;
+
 public record PingCommandParams
 {
-    // required positional argument (index 0). Example: /ping "Hello"
+    // Required positional argument (index 0). Example: /ping "Hello"
     [CommandParam(Position = 0, Required = true)] 
     public string? Message { get; init; } 
 
-    // optional named argument. Example: /ping c=5
+    // Optional named argument. Example: /ping c=5
     [CommandParam(Name = "c")]
     public int? Count { get; init; }
 }
 ```
 
-### Create the Handler
+### 2. Create the Handler
 
 Implement the handler logic using `ICommandHandler<TParams>`.
 
 ```csharp
+using Telegram.Bot;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Models;
+
 public class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCommandParams>
 {
     public string Command => "ping";
 
     public async Task HandleAsync(PingCommandParams parameters, CommandContext context, CancellationToken cancellationToken)
     {
-        await bot.ReplyMessage(context, $"Pong! Message: {parameters.Message}, Count: {parameters.Count ?? 0}");
+        await bot.SendMessage(
+            chatId: context.Message.Chat.Id,
+            text: $"Pong! Message: {parameters.Message}, Count: {parameters.Count ?? 0}",
+            cancellationToken: cancellationToken
+        );
     }
 }
 ```
 
 ---
 
-## Creating a Callback (Inline Keyboard Button)
+## 🔘 Creating a Callback (`ICallbackHandler`)
 
 Map query parameters from inline keyboards safely and transparently into strongly-typed handlers.
 
-### Define the DTO
+### 1. Define the DTO
 
-Use `JsonPropertyName` overrides to keep payload keys compact inside Telegram's callback byte-limit constraint.
+Use standard JSON attribute overrides to keep payload keys compact inside Telegram's callback byte-limit constraint.
 
 ```csharp
+using System.Text.Json.Serialization;
+
 public record PingCallbackParams
 {
     [JsonPropertyName("m")] 
@@ -84,14 +175,18 @@ public record PingCallbackParams
 }
 ```
 
-### Create the Handler
+### 2. Create the Handler
 
 Implement the handler logic using `ICallbackHandler<TParams>`.
 
 ```csharp
+using Telegram.Bot;
+using Telegram.BotKit.Callbacks.Abstractions;
+using Telegram.BotKit.Callbacks.Models;
+
 public class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandler<PingCallbackParams>
 {
-    public string Key => "example:ping"; // matches callback data format like example:ping?m=text&c=5
+    public string Key => "example:ping"; // Matches callback data format like example:ping?m=text&c=5
 
     public async Task HandleAsync(PingCallbackParams parameters, CallbackContext context, CancellationToken cancellationToken)
     {
@@ -107,110 +202,43 @@ public class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandler<Ping
 
 ---
 
-## Creating an Inline Query
+## 🔍 Creating an Inline Query (`IInlineQueryHandler`)
 
-Respond to structured inline queries entered by users inside any conversation thread.
-
-### Define the DTO
-
-Describe the search keyword parameter and any optional configurations.
+Respond to structured inline queries entered by users inside any conversation thread. Match and process queries dynamically inside the `CanHandle` block.
 
 ```csharp
-public record SearchQueryParams
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.InlineQueryResults;
+using Telegram.BotKit.InlineQueries.Abstractions;
+using Telegram.BotKit.InlineQueries.Models;
+
+public class SearchInlineQueryHandler : IInlineQueryHandler
 {
-    // required query text. Example: @YourBot search query_text
-    [InlineQyeryParam(Position = 0, Required = true)]
-    public string Query { get; init; } = string.Empty;
+    // Match queries starting with "search" (e.g. "@YourBot search keyword")
+    public bool CanHandle(InlineQuery query) =>
+        query.Query.StartsWith("search", StringComparison.OrdinalIgnoreCase);
 
-    // optional named parameter. Example: @YourBot search query_text limit=10
-    [InlineQyeryParam(Name = "limit")]
-    public int Limit { get; init; } = 5;
-}
-```
-
-### Create the Handler
-
-Implement the handler logic using `IInlineQueryHandler<TParams>`.
-
-```csharp
-public class SearchInlineQueryHandler(ITelegramBotClient bot) : IInlineQueryHandler<SearchQueryParams>
-{
-    public string Key => "search";
-
-    public async Task HandleAsync(SearchQueryParams parameters, InlineQueryContext context, CancellationToken cancellationToken)
+    public async Task<InlineQueryBatch> HandleAsync(InlineQueryContext context, CancellationToken cancellationToken)
     {
+        var searchText = context.Query.Query["search".Length..].Trim();
+
         var results = new InlineQueryResult[]
         {
             new InlineQueryResultArticle(
                 id: "1",
-                title: $"Result: {parameters.Query}",
-                inputMessageContent: new InputTextMessageContent($"Selected: {parameters.Query} (Max limit: {parameters.Limit})")
+                title: $"Result: {searchText}",
+                inputMessageContent: new InputTextMessageContent($"Selected search keyword: {searchText}")
             )
         };
 
-        await bot.AnswerInlineQuery(context.Id, results, cancellationToken: cancellationToken);
+        return new InlineQueryBatch(results, IsPersonal: true, CacheTime: 300);
     }
 }
 ```
 
 ---
 
-## Creating a Global Catch-All Inline Query
-
-If you want to capture raw query text directly (without requiring a specific trigger prefix like `search`), declare a handler with an empty key (`Key => string.Empty`). This is ideal for dynamic real-time suggestions like parsing promo codes as the user types.
-
-### Define the DTO
-
-Use a simple parameter model to capture raw text.
-
-```csharp
-public record RawQueryParams
-{
-    public string? RawText { get; init; }
-}
-```
-
-### Create the Handler
-
-Implement the fallback handler by returning an empty string for the key.
-
-```csharp
-public class InteractiveInlineQueryHandler(ITelegramBotClient bot) : IInlineQueryHandler<RawQueryParams>
-{
-    // empty key captures all raw input that doesn't match specific query keys
-    public string Key => string.Empty;
-
-    public async Task HandleAsync(RawQueryParams parameters, InlineQueryContext context, CancellationToken cancellationToken)
-    {
-        var input = context.Query?.Trim() ?? string.Empty;
-        var results = new List<InlineQueryResult>();
-
-        var promoCodeText = string.IsNullOrWhiteSpace(input) ? "promocode" : input;
-        results.Add(new InlineQueryResultArticle(
-            id: "promo",
-            title: "Enter Promo Code",
-            inputMessageContent: new InputTextMessageContent($"Promo code applied: {promoCodeText}")
-        ));
-
-        // conditionally show another result if input can be parsed as a number
-        var isNumeric = int.TryParse(input, out var number);
-        if (string.IsNullOrWhiteSpace(input) || isNumeric)
-        {
-            results.Add(new InlineQueryResultArticle(
-                id: "add_number",
-                title: "Add Number",
-                inputMessageContent: new InputTextMessageContent($"Number added: {(isNumeric ? number : 0)}")
-            ));
-        }
-
-        await bot.AnswerInlineQuery(context.Id, results, cancellationToken: cancellationToken);
-    }
-}
-```
-
----
-
-## Creating Message Handlers
+## ✉️ Creating Message Handlers (`IMessageHandler`)
 
 Message handlers process plain text, media, or service events. They can be registered as global handlers or bound to a specific conversational state.
 
@@ -221,16 +249,15 @@ Global handlers have no state constraints (`RequiredState => null`) and process 
 ```csharp
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Abstractions;
-
-namespace MyBot.Handlers;
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
 
 public sealed class SimpleStickerHandler(ITelegramBotClient bot) : IMessageHandler
 {
-    // runs regardless of the active user state
+    // Runs regardless of the active user state
     public string? RequiredState => null;
 
-    // restricts handling to sticker messages sent in private chats
+    // Restricts handling to sticker messages sent in private chats
     public bool CanHandle(MessageContext context) =>
         context.Message is { Chat.Type: ChatType.Private, Sticker: { } };
 
@@ -250,14 +277,13 @@ public sealed class SimpleStickerHandler(ITelegramBotClient bot) : IMessageHandl
 Stateful handlers only execute if the framework's state-middleware resolves a user state matching `RequiredState`.
 
 ```csharp
-using Telegram.BotKit;
-using Telegram.BotKit.Abstractions;
+using Telegram.Bot;
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
 
-namespace MyBot.Handlers;
-
-public sealed class AgeInputHandler(IStateStorage stateStorage) : IMessageHandler
+public sealed class AgeInputHandler(IStateStorage stateStorage, ITelegramBotClient bot) : IMessageHandler
 {
-    // active only if the state middleware resolved user state as "awaiting_age"
+    // Active only if the state middleware resolved user state as "awaiting_age"
     public string? RequiredState => "awaiting_age";
 
     public bool CanHandle(MessageContext context) =>
@@ -270,14 +296,14 @@ public sealed class AgeInputHandler(IStateStorage stateStorage) : IMessageHandle
 
         if (int.TryParse(input, out var age))
         {
-            // save the valid input and clear the conversational state
+            // Save valid input and clear the conversational state
             await stateStorage.SetStateAsync(userId, null);
-            await context.Message.ReplyAsync($"Age saved: {age}!", cancellationToken);
+            await bot.SendMessage(userId, $"Age saved: {age}!", cancellationToken: cancellationToken);
         }
         else
         {
-            // validation failed: keep the state active and prompt again
-            await context.Message.ReplyAsync("Please enter a valid number:", cancellationToken);
+            // Validation failed: keep state active and prompt again
+            await bot.SendMessage(userId, "Please enter a valid number:", cancellationToken: cancellationToken);
         }
     }
 }
@@ -285,20 +311,77 @@ public sealed class AgeInputHandler(IStateStorage stateStorage) : IMessageHandle
 
 ---
 
-## Registration (Program.cs)
+## 🔄 Stateful Dialogs (FSM / Wizard Flow Setup)
 
-Use the host builder to establish the application container and automatically scan the assembly for all handlers.
+A common bot pattern: a user triggers a flow (e.g., types `/setage`), the system expects a text answer next, and we route that specific text to a designated state-bound handler.
+
+```
+[ User sends "/setage" ] ──> CommandHandler updates State to "awaiting_age" in Cache/DB
+                                        │
+[ User sends "25" ]      ──> StateMiddleware loads "awaiting_age" -> Assigns to context.UserState
+                                        │
+                             Router matches handler with RequiredState == "awaiting_age"
+```
+
+### Step 1: Create State Storage Abstraction
+```csharp
+public interface IStateStorage
+{
+    Task<string?> GetStateAsync(long userId);
+    Task SetStateAsync(long userId, string? state);
+}
+```
+
+### Step 2: Implement State Resolving Middleware
+Before routing standard messages, this middleware fetches the current state of the sender and assigns it to `context.UserState`.
 
 ```csharp
-var builder = BotApplication.CreateBuilder(args);
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
+using Telegram.BotKit.Shared;
 
-// automatically registers command, callback, message, and inline query handlers
-var assembly = typeof(Program).Assembly;
-builder.Services.AddCommandHandlers(assembly);
-builder.Services.AddCallbackHandlers(assembly);
-builder.Services.AddMessageHandlers(assembly);
-builder.Services.AddInlineQueryHandlers(assembly);
+namespace MyBot.Middlewares;
 
-var app = builder.Build();
-await app.RunAsync();
+public sealed class UserStateMiddleware(IStateStorage stateStorage) : IMessageStateMiddleware
+{
+    public async Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    {
+        var userId = context.Message.From?.Id;
+        if (userId is not null)
+        {
+            context.UserState = await stateStorage.GetStateAsync(userId.Value);
+        }
+        await next();
+    }
+}
 ```
+
+### Step 3: Trigger Conversation State in Command
+```csharp
+using Telegram.Bot;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Models;
+
+public sealed class SetAgeCommandHandler(IStateStorage stateStorage, ITelegramBotClient bot) : ICommandHandler<NoParams>
+{
+    public string Command => "setage";
+    public string[] Aliases => [];
+
+    public async Task HandleAsync(NoParams parameters, CommandContext context, CancellationToken cancellationToken)
+    {
+        var userId = context.Message.From!.Id;
+
+        // Set state to trigger the stateful handler on the next user text update
+        await stateStorage.SetStateAsync(userId, "awaiting_age");
+
+        await bot.SendMessage(
+            chatId: context.Message.Chat.Id,
+            text: "Please enter your age:",
+            cancellationToken: cancellationToken
+        );
+    }
+}
+```
+
+### Step 4: Handle State Input and Reset (FSM Exit)
+Implement the message handler with `RequiredState => "awaiting_age"` (as shown in the **Message Handlers** section above) to validate the input, save it, and then call `await stateStorage.SetStateAsync(userId, null)` to exit the state flow.

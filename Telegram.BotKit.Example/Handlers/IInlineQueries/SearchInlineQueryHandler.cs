@@ -1,46 +1,32 @@
-﻿using Telegram.Bot;
+﻿using Telegram.Bot.Types;
 using Telegram.Bot.Types.InlineQueryResults;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Attributes;
-using Telegram.BotKit.Example.Constants;
+using Telegram.BotKit.InlineQueries.Abstractions;
+using Telegram.BotKit.InlineQueries.Models;
 
 namespace Telegram.BotKit.Example.Handlers.IInlineQueries;
-
-internal record SearchQueryParams
-{
-    // required query parameter. Example: @YourBot search test_query
-    [InlineQyeryParam(Position = 0, Required = true)]
-    public string Query { get; init; } = string.Empty;
-
-    // optional named argument limiting results. Example: @YourBot search test_query limit=10
-    [InlineQyeryParam(Name = "limit")]
-    public int Limit { get; init; } = 5;
-}
 
 /// <summary>
 /// Processes inline query keywords starting with "search" and supplies simulated search results.
 /// </summary>
-internal sealed class SearchInlineQueryHandler(ITelegramBotClient bot) : IInlineQueryHandler<SearchQueryParams>
+internal sealed class SearchInlineQueryHandler() : IInlineQueryHandler
 {
-    public string Key => InlineQueryKeys.Example.Search;
+    public bool CanHandle(InlineQuery query) =>
+            query.Query.StartsWith("book", StringComparison.OrdinalIgnoreCase);
 
-    public async Task HandleAsync(SearchQueryParams parameters, InlineQueryContext context, CancellationToken cancellationToken = default)
+    public Task<InlineQueryBatch> HandleAsync(InlineQueryContext context, CancellationToken cancellationToken)
     {
-        var results = new InlineQueryResult[]
+        var results = new List<InlineQueryResult>
         {
             new InlineQueryResultArticle(
-                id: "1",
-                title: $"Result for: {parameters.Query}",
-                inputMessageContent: new InputTextMessageContent($"Selected: {parameters.Query} (Max limit: {parameters.Limit})")
+                id: "book_1",
+                title: "CLR via C#",
+                inputMessageContent: new InputTextMessageContent("Jeffrey Richter - CLR via C#")
             )
+            {
+                Description = "Jeffrey Richter - CLR via C#"
+            }
         };
 
-        await bot.AnswerInlineQuery(
-          context.Id,
-            results,
-            cacheTime: 0,
-            isPersonal: true,
-            cancellationToken: cancellationToken
-        );
+        return Task.FromResult(new InlineQueryBatch(results, CacheTime: 300));
     }
 }
