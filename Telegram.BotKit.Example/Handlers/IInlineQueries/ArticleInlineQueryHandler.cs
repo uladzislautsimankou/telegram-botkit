@@ -22,6 +22,6 @@ internal sealed class ArticleInlineQueryHandler : IInlineQueryHandler
         };
 
         // Запрос содержит чувствительные данные юзера, помечаем как IsPersonal
-        return Task.FromResult(new InlineQueryBatch(results, IsPersonal: true, CacheTime: 60));
+        return Task.FromResult(new InlineQueryBatch(results, isPersonal: true, cacheTime: 60));
     }
 }

@@ -45,6 +45,11 @@ public sealed class InlineQueryContext(
     public string? NextOffset { get; set; }
 
     /// <summary>
+    /// Gets or sets the button displayed above the inline query results.
+    /// </summary>
+    public InlineQueryResultsButton? Button { get; set; }
+
+    /// <summary>
     /// Gets the collection of exceptions captured from individual handlers that failed during parallel execution.
     /// </summary>
     public List<Exception> Exceptions { get; } = [];

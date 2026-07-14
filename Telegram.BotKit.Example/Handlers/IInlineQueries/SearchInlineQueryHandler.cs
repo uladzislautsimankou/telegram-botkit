@@ -27,6 +27,6 @@ internal sealed class SearchInlineQueryHandler() : IInlineQueryHandler
             }
         };
 
-        return Task.FromResult(new InlineQueryBatch(results, CacheTime: 300));
+        return Task.FromResult(new InlineQueryBatch(results, cacheTime: 300));
     }
 }

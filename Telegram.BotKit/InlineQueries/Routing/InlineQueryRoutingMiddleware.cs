@@ -1,4 +1,5 @@
-﻿using Telegram.BotKit.InlineQueries.Abstractions;
+﻿using Microsoft.Extensions.Logging;
+using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
 using Telegram.BotKit.Shared;
 using Telegram.BotKit.Shared.Exceptions;
@@ -8,7 +9,10 @@ namespace Telegram.BotKit.InlineQueries.Routing;
 /// <summary>
 /// Routing middleware responsible for identifying and executing matching inline query handlers.
 /// </summary>
-internal sealed class InlineQueryRoutingMiddleware(IEnumerable<IInlineQueryHandler> handlers) : IInlineQueryMiddleware
+internal sealed class InlineQueryRoutingMiddleware(
+    IEnumerable<IInlineQueryHandler> handlers,
+    ILogger<InlineQueryRoutingMiddleware> logger
+    ) : IInlineQueryMiddleware
 {
     public async Task InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
@@ -34,7 +38,7 @@ internal sealed class InlineQueryRoutingMiddleware(IEnumerable<IInlineQueryHandl
             try
             {
                 var batch = await handler.HandleAsync(context, cancellationToken);
-                PopulateContext(context, batch);
+                PopulateContext(context, batch, handler.GetType().Name);
             }
             catch (Exception ex)
             {
@@ -56,7 +60,7 @@ internal sealed class InlineQueryRoutingMiddleware(IEnumerable<IInlineQueryHandl
         await next();
     }
 
-    private static void PopulateContext(InlineQueryContext context, InlineQueryBatch batch)
+    private void PopulateContext(InlineQueryContext context, InlineQueryBatch batch, string handlerName)
     {
         lock (context.Results)
         {
@@ -73,15 +77,26 @@ internal sealed class InlineQueryRoutingMiddleware(IEnumerable<IInlineQueryHandl
             {
                 context.NextOffset = batch.NextOffset;
             }
+            if (batch.Button is not null)
+            {
+                if (context.Button is not null)
+                {
+                    logger.LogWarning(
+                        "Conflict: Multiple inline query handlers provided a button. " +
+                        "Overwriting previous button with the one from '{HandlerName}'",
+                        handlerName);
+                }
+                context.Button = batch.Button;
+            }
         }
     }
 
-    private static async Task InvokeHandlerSafeAsync(InlineQueryContext context, IInlineQueryHandler handler, CancellationToken cancellationToken)
+    private async Task InvokeHandlerSafeAsync(InlineQueryContext context, IInlineQueryHandler handler, CancellationToken cancellationToken)
     {
         try
         {
             var batch = await handler.HandleAsync(context, cancellationToken);
-            PopulateContext(context, batch);
+            PopulateContext(context, batch, handler.GetType().Name);
         }
         catch (Exception ex)
         {
