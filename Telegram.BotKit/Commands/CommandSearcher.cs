@@ -5,6 +5,10 @@
 /// </summary>
 internal sealed class CommandSearcher(IEnumerable<string> commands)
 {
+    private const int MaxCommandLength = 64;
+    private const int StackallocCharThreshold = 256;
+    private const int StackallocIntThreshold = 512;
+
     private readonly (string Command, string Normalized, string Sorted)[] _index = commands.Select(cmd =>
     {
         var norm = Normalize(cmd);
@@ -18,6 +22,9 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
     /// <returns>A list of up to three close command suggestions ordered by similarity.</returns>
     public List<string> FindSimilar(string input)
     {
+        if (string.IsNullOrWhiteSpace(input) || input.Length > MaxCommandLength)
+            return new List<string>();
+
         var inputNorm = Normalize(input);
 
         if (inputNorm.Length == 0)
@@ -85,7 +92,7 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
             return string.Empty;
 
         // keep only alphanumeric characters and normalize to lowercase (e.g., weather_minsk -> weatherminsk)
-        var buffer = s.Length <= 256
+        var buffer = s.Length <= StackallocCharThreshold
             ? stackalloc char[s.Length]
             : new char[s.Length];
 
@@ -109,7 +116,7 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
         if (string.IsNullOrEmpty(s))
             return string.Empty;
 
-        var buffer = s.Length <= 256
+        var buffer = s.Length <= StackallocCharThreshold
             ? stackalloc char[s.Length]
             : new char[s.Length];
 
@@ -128,7 +135,12 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
         var length1 = source.Length;
         var length2 = target.Length;
 
-        Span<int> d = stackalloc int[(length1 + 1) * (length2 + 1)];
+        var matrixSize = (length1 + 1) * (length2 + 1);
+
+        Span<int> d = matrixSize <= StackallocIntThreshold
+            ? stackalloc int[matrixSize]
+            : new int[matrixSize];
+
         var width = length2 + 1;
 
         for (int i = 0; i <= length1; i++) d[i * width] = i;

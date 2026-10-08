@@ -68,4 +68,18 @@ public sealed class CommandSearcherTests
         // assert
         result.Should().BeEmpty();
     }
+
+    // verifies that inputs exceeding the maximum allowed command length are rejected early and return no suggestions
+    [Fact]
+    public void FindSimilar_WhenInputExceedsMaxCommandLength_ShouldReturnEmptyWithoutCrashing()
+    {
+        // arrange
+        var longSpamInput = "/" + new string('a', 5000);
+
+        // act
+        var result = _searcher.FindSimilar(longSpamInput);
+
+        // assert
+        result.Should().BeEmpty();
+    }
 }
