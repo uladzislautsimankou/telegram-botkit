@@ -12,41 +12,18 @@ internal sealed class CommandHandlerRegistry
     private readonly Dictionary<string, Type> _handlerMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Type> _aliasMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _commandKeys = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<Type> _invokerTypes = [];
+
     private CommandSearcher? _searcher;
-    private bool _isInitialized;
-    private readonly object _lock = new();
+    public CommandSearcher Searcher => _searcher ??= new CommandSearcher(_commandKeys);
 
-    public CommandSearcher Searcher => _searcher ?? throw new InvalidOperationException("Registry is not initialized yet.");
-
-    public void RegisterInvokerType(Type invokerType) => _invokerTypes.Add(invokerType);
-
-    public void Initialize(IServiceProvider serviceProvider)
+    public void Register(string command, string[] aliases, Type invokerType)
     {
-        if (_isInitialized)
-            return;
+        _commandKeys.Add(command);
+        _handlerMap[command] = invokerType;
 
-        lock (_lock)
+        foreach (var alias in aliases)
         {
-            if (_isInitialized)
-                return;
-
-            using var scope = serviceProvider.CreateScope();
-            foreach (var type in _invokerTypes)
-            {
-                var invoker = (ICommandHandlerInvoker)scope.ServiceProvider.GetRequiredService(type);
-
-                _commandKeys.Add(invoker.Command);
-                _handlerMap[invoker.Command] = type;
-
-                foreach (var alias in invoker.Aliases)
-                {
-                    _aliasMap[alias] = type;
-                }
-            }
-
-            _searcher = new CommandSearcher(_commandKeys);
-            _isInitialized = true;
+            _aliasMap[alias] = invokerType;
         }
     }
 

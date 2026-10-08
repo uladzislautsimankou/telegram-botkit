@@ -11,14 +11,14 @@ public interface ICommandHandler<TParams> where TParams : class, new()
     /// <summary>
     /// Gets the command name (trigger) without the leading slash (e.g., "start" for /start).
     /// </summary>
-    string Command { get; }
+    static abstract string Command { get; }
 
     /// <summary> 
     /// Gets a collection of alternative command names (aliases) that can be used
     /// to invoke the handler in addition to the primary <see cref="Command"/>.
     /// If no aliases are defined, returns an empty array.
     /// </summary>
-    virtual string[] Aliases => Array.Empty<string>();
+    static virtual string[] Aliases => Array.Empty<string>();
 
     /// <summary>
     /// Handles the command execution.

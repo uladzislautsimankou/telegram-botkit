@@ -21,7 +21,7 @@ internal record PingCallbackParams
 /// </summary>
 internal sealed class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandler<PingCallbackParams>
 {
-    public string Key => CallbackKeys.Example.Ping;
+    public static string Key => CallbackKeys.Example.Ping;
 
     public async Task HandleAsync(PingCallbackParams parameters, CallbackContext context, CancellationToken cancellationToken = default)
     {

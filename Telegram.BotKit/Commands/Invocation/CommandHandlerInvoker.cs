@@ -12,10 +12,6 @@ internal sealed class CommandHandlerInvoker<TParams>(
     ICommandParameterBinder binder
     ) : ICommandHandlerInvoker where TParams : class, new()
 {
-    public string Command => handler.Command;
-
-    public string[] Aliases => handler.Aliases;
-
     public Type HandlerType => typeof(ICommandHandler<TParams>);
 
     public object HandlerInstance => handler;

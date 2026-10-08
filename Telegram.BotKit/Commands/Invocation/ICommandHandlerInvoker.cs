@@ -8,16 +8,6 @@ namespace Telegram.BotKit.Commands.Invocation;
 internal interface ICommandHandlerInvoker
 {
     /// <summary>
-    /// Gets the primary trigger command name.
-    /// </summary>
-    string Command { get; }
-
-    /// <summary>
-    /// Gets alternative command names (aliases).
-    /// </summary>
-    string[] Aliases { get; }
-
-    /// <summary>
     /// Gets the handler interface type.
     /// </summary>
     Type HandlerType { get; }

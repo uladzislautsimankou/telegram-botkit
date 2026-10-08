@@ -36,10 +36,8 @@ public sealed class CallbackRoutingMiddlewareTests
     {
         // arrange
         var invoker = Substitute.For<ICallbackHandlerInvoker>();
-        invoker.Key.Returns("menu:main");
-
         var registry = new CallbackHandlerRegistry();
-        registry.RegisterInvokerType(typeof(ICallbackHandlerInvoker));
+        registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
 
         var serviceProvider = CreateMockServiceProvider(new()
         {
@@ -65,10 +63,8 @@ public sealed class CallbackRoutingMiddlewareTests
     {
         // arrange
         var invoker = Substitute.For<ICallbackHandlerInvoker>();
-        invoker.Key.Returns("menu:main");
-
         var registry = new CallbackHandlerRegistry();
-        registry.RegisterInvokerType(typeof(ICallbackHandlerInvoker));
+        registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
 
         var serviceProvider = CreateMockServiceProvider(new()
         {
@@ -94,10 +90,8 @@ public sealed class CallbackRoutingMiddlewareTests
     {
         // arrange
         var invoker = Substitute.For<ICallbackHandlerInvoker>();
-        invoker.Key.Returns("menu:main");
-
         var registry = new CallbackHandlerRegistry();
-        registry.RegisterInvokerType(typeof(ICallbackHandlerInvoker));
+        registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
 
         var serviceProvider = CreateMockServiceProvider(new()
         {

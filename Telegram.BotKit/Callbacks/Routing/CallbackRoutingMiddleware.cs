@@ -17,8 +17,6 @@ internal sealed class CallbackRoutingMiddleware(
 {
     public async Task InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        registry.Initialize(serviceProvider);
-
         if (!registry.TryGetInvokerType(context.Key, out var invokerType))
         {
             throw new RouteNotFoundException(context.Key);

@@ -38,6 +38,11 @@ public sealed class CallbackPipelineBuilder(IServiceCollection services) : Pipel
             throw new InvalidOperationException($"Type '{handlerType.Name}' does not implement ICallbackHandler<TParams>.");
         }
 
+        var keyProp = handlerType.GetProperty("Key", BindingFlags.Public | BindingFlags.Static)
+            ?? throw new InvalidOperationException($"Type '{handlerType.Name}' must declare 'public static string Key'.");
+
+        var key = (string)keyProp.GetValue(null)!;
+
         foreach (var callbackInterface in callbackInterfaces)
         {
             // register the handler itself under its interface ICallbackHandler<TParams>
@@ -51,7 +56,7 @@ public sealed class CallbackPipelineBuilder(IServiceCollection services) : Pipel
 
             // register the type in DI and add it to the registry
             Services.AddTransient(concreteInvokerType);
-            registry.RegisterInvokerType(concreteInvokerType);
+            registry.Register(key, concreteInvokerType);
         }
 
         return this;
@@ -135,6 +140,11 @@ public static class CallbackServiceCollectionExtensions
 
         foreach (var typeInfo in handlerTypes)
         {
+            var handlerType = typeInfo.Implementation;
+
+            var keyProp = handlerType.GetProperty("Key", BindingFlags.Public | BindingFlags.Static);
+            var key = (string)keyProp!.GetValue(null)!;
+
             // register the handler under its closed interface (e.g., ICallbackHandler<StartParams>)
             services.AddTransient(typeInfo.Interface, typeInfo.Implementation);
 
@@ -146,8 +156,7 @@ public static class CallbackServiceCollectionExtensions
 
             // register the invoker and add it to the registry
             services.AddTransient(concreteInvokerType);
-            registry.RegisterInvokerType(concreteInvokerType);
+            registry.Register(key, concreteInvokerType);
         }
-
     }
 }

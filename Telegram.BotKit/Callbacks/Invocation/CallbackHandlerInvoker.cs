@@ -12,8 +12,6 @@ internal sealed class CallbackHandlerInvoker<TParams>(
     ICallbackParameterBinder binder
     ) : ICallbackHandlerInvoker where TParams : class, new()
 {
-    public string Key => handler.Key;
-
     public async Task InvokeAsync(CallbackContext context, CancellationToken cancellationToken = default)
     {
         var parameters = binder.Bind<TParams>(context);

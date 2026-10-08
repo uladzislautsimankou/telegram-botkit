@@ -38,6 +38,13 @@ public sealed class CommandPipelineBuilder(IServiceCollection services)
             throw new InvalidOperationException($"Type '{handlerType.Name}' does not implement ICommandHandler<TParams>.");
         }
 
+        var commandProp = handlerType.GetProperty("Command", BindingFlags.Public | BindingFlags.Static)
+            ?? throw new InvalidOperationException($"Type '{handlerType.Name}' must declare 'public static string Command'.");
+        var command = (string)commandProp.GetValue(null)!;
+
+        var aliasProp = handlerType.GetProperty("Aliases", BindingFlags.Public | BindingFlags.Static);
+        var aliases = (string[]?)aliasProp?.GetValue(null) ?? [];
+
         foreach (var commandInterface in commandInterfaces)
         {
             // register the handler itself under its interface ICommandHandler<TParams>
@@ -51,7 +58,7 @@ public sealed class CommandPipelineBuilder(IServiceCollection services)
 
             // register the type in DI and add it to the registry
             Services.AddTransient(concreteInvokerType);
-            registry.RegisterInvokerType(concreteInvokerType);
+            registry.Register(command, aliases, concreteInvokerType);
         }
 
         return this;
@@ -134,18 +141,21 @@ public static class CommandServiceCollectionExtensions
 
         foreach (var typeInfo in handlerTypes)
         {
-            // register the handler under its closed interface (e.g., ICommandHandler<StartParams>)
-            services.AddTransient(typeInfo.Interface, typeInfo.Implementation);
+            var handlerType = typeInfo.Implementation;
 
-            // extract TParams from ICommandHandler<TParams>
+            var commandProp = handlerType.GetProperty("Command", BindingFlags.Public | BindingFlags.Static);
+            var command = (string)commandProp!.GetValue(null)!;
+
+            var aliasProp = handlerType.GetProperty("Aliases", BindingFlags.Public | BindingFlags.Static);
+            var aliases = (string[]?)aliasProp?.GetValue(null) ?? [];
+
+            services.AddTransient(typeInfo.Interface, handlerType);
+
             var paramsType = typeInfo.Interface.GetGenericArguments()[0];
-
-            // create a closed invoker type: CommandHandlerInvoker<StartParams>
             var concreteInvokerType = genericInvokerType.MakeGenericType(paramsType);
-
-            // register the invoker and add it to the registry
             services.AddTransient(concreteInvokerType);
-            registry.RegisterInvokerType(concreteInvokerType);
+
+            registry.Register(command, aliases, concreteInvokerType);
         }
     }
 }

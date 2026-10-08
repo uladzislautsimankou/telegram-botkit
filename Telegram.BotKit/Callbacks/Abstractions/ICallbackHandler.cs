@@ -12,7 +12,7 @@ public interface ICallbackHandler<TParams> where TParams : class, new()
     /// Gets the unique key (route) for this callback handler.
     /// The router matches this key against the beginning of the callback data string (e.g., "game:move").
     /// </summary>
-    string Key { get; }
+    static abstract string Key { get; }
 
     /// <summary>
     /// Handles the callback query execution.

@@ -24,8 +24,6 @@ internal sealed class CommandRoutingMiddleware(
 
     public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        registry.Initialize(serviceProvider);
-
         var routeKey = context.VirtualRoute ?? context.Command;
 
         // exit early if the command is in the ignore list

@@ -27,7 +27,7 @@ internal record PingCommandParams
 /// </summary>
 internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCommandParams>
 {
-    public string Command => CommandKeys.Example.Ping;
+    public static string Command => CommandKeys.Example.Ping;
 
     public async Task HandleAsync(PingCommandParams parameters, CommandContext context, CancellationToken cancellationToken = default)
     {
