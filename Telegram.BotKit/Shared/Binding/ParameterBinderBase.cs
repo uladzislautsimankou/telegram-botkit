@@ -34,7 +34,7 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
         var instance = new TParams();
         var metadataList = _cache.GetOrAdd(typeof(TParams), BuildMetadata);
 
-        foreach (var meta in metadataList.OrderBy(m => m.Position))
+        foreach (var meta in metadataList)
         {
             var rawValue = GetRawValue(meta, namedArgs, positionalQueue, metadataList);
 
@@ -74,6 +74,7 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
             .Where(x => x.Attr is not null)
             // invoke the abstract mapper method implemented by concrete binders
             .Select(x => MapAttribute(x.Prop, x.Attr!))
+            .OrderBy(m => m.Position)
             .ToList();
     }
 
