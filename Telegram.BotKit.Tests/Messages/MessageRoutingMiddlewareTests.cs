@@ -34,7 +34,7 @@ public sealed class MessageRoutingMiddlewareTests
         private readonly bool _canHandle;
         public TestStateHandler(bool canHandle) => _canHandle = canHandle;
 
-        public string? RequiredState => "waiting_for_name";
+        public static string? RequiredState => "waiting_for_name";
         public bool CanHandle(MessageContext context) => _canHandle;
         public Task HandleAsync(MessageContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
@@ -58,8 +58,8 @@ public sealed class MessageRoutingMiddlewareTests
         var globalHandler = new TestGlobalHandler(canHandle: true);
 
         var registry = new MessageHandlerRegistry();
-        registry.RegisterHandlerType(typeof(TestStateHandler));
-        registry.RegisterHandlerType(typeof(TestGlobalHandler));
+        registry.Register(typeof(TestStateHandler), "waiting_for_name");
+        registry.Register(typeof(TestGlobalHandler), null);
 
         var serviceProvider = CreateMockServiceProvider(new()
         {
@@ -94,8 +94,8 @@ public sealed class MessageRoutingMiddlewareTests
         var globalHandler = new TestGlobalHandler(canHandle: true);
 
         var registry = new MessageHandlerRegistry();
-        registry.RegisterHandlerType(typeof(TestStateHandler));
-        registry.RegisterHandlerType(typeof(TestGlobalHandler));
+        registry.Register(typeof(TestStateHandler), "waiting_for_name");
+        registry.Register(typeof(TestGlobalHandler), null);
 
         var serviceProvider = CreateMockServiceProvider(new()
         {
@@ -130,8 +130,8 @@ public sealed class MessageRoutingMiddlewareTests
         var globalHandler = new TestGlobalHandler(canHandle: true);
 
         var registry = new MessageHandlerRegistry();
-        registry.RegisterHandlerType(typeof(TestStateHandler));
-        registry.RegisterHandlerType(typeof(TestGlobalHandler));
+        registry.Register(typeof(TestStateHandler), "waiting_for_name");
+        registry.Register(typeof(TestGlobalHandler), null);
 
         var serviceProvider = CreateMockServiceProvider(new()
         {
@@ -165,7 +165,7 @@ public sealed class MessageRoutingMiddlewareTests
         var globalHandler = new TestGlobalHandler(canHandle: false);
 
         var registry = new MessageHandlerRegistry();
-        registry.RegisterHandlerType(typeof(TestGlobalHandler));
+        registry.Register(typeof(TestGlobalHandler), null);
 
         var serviceProvider = CreateMockServiceProvider(new()
         {

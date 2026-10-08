@@ -11,43 +11,21 @@ internal sealed class MessageHandlerRegistry
 {
     private readonly Dictionary<string, List<Type>> _stateHandlerTypes = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Type> _globalHandlerTypes = [];
-    private readonly List<Type> _registeredHandlerTypes = [];
-    private bool _isInitialized;
-    private readonly object _lock = new();
 
-    public void RegisterHandlerType(Type handlerType) => _registeredHandlerTypes.Add(handlerType);
-
-    public void Initialize(IServiceProvider serviceProvider)
+    public void Register(Type handlerType, string? requiredState)
     {
-        if (_isInitialized)
-            return;
-
-        lock (_lock)
+        if (requiredState is not null)
         {
-            if (_isInitialized)
-                return;
-
-            using var scope = serviceProvider.CreateScope();
-            foreach (var type in _registeredHandlerTypes)
+            if (!_stateHandlerTypes.TryGetValue(requiredState, out var list))
             {
-                var handler = (IMessageHandler)scope.ServiceProvider.GetRequiredService(type);
-
-                if (handler.RequiredState is not null)
-                {
-                    if (!_stateHandlerTypes.TryGetValue(handler.RequiredState, out var list))
-                    {
-                        list = [];
-                        _stateHandlerTypes[handler.RequiredState] = list;
-                    }
-                    list.Add(type);
-                }
-                else
-                {
-                    _globalHandlerTypes.Add(type);
-                }
+                list = [];
+                _stateHandlerTypes[requiredState] = list;
             }
-
-            _isInitialized = true;
+            list.Add(handlerType);
+        }
+        else
+        {
+            _globalHandlerTypes.Add(handlerType);
         }
     }
 

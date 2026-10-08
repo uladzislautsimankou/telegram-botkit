@@ -11,7 +11,7 @@ public interface IMessageHandler
     /// Gets the user state required to trigger this handler.
     /// If this returns <see langword="null"/>, the handler is treated as global and is active when the user has no state.
     /// </summary>
-    string? RequiredState => null;
+    static virtual string? RequiredState => null;
 
     /// <summary>
     /// Determines whether the incoming message context satisfies the handler's execution criteria.

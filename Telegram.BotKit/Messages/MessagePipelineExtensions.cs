@@ -23,11 +23,18 @@ public sealed class MessagePipelineBuilder(IServiceCollection services)
     /// </summary>
     public MessagePipelineBuilder AddHandler<THandler>() where THandler : class, IMessageHandler
     {
+        var handlerType = typeof(THandler);
+
         Services.AddTransient<THandler>();
         Services.AddTransient<IMessageHandler, THandler>();
 
         var registry = GetOrCreateRegistry();
-        registry.RegisterHandlerType(typeof(THandler));
+
+        var stateProp = handlerType.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
+        var requiredState = (string?)stateProp?.GetValue(null);
+
+        registry.Register(handlerType, requiredState);
+
 
         return this;
     }
@@ -105,7 +112,11 @@ public static class MessageServiceCollectionExtensions
         {
             services.AddTransient(type);
             services.AddTransient(handlerType, type);
-            registry.RegisterHandlerType(type);
+
+            var stateProp = type.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
+            var requiredState = (string?)stateProp?.GetValue(null);
+
+            registry.Register(type, requiredState);
         }
     }
 }

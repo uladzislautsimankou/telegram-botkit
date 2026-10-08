@@ -15,8 +15,6 @@ internal sealed class MessageRoutingMiddleware(
 {
     public async Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        registry.Initialize(serviceProvider);
-
         IMessageHandler? matched = null;
 
         // find a handler bound specifically to the current user state
