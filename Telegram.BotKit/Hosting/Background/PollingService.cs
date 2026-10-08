@@ -51,7 +51,7 @@ internal sealed class PollingService(
         var receiverOptions = new ReceiverOptions
         {
             AllowedUpdates = allowedUpdates,
-            DropPendingUpdates = false
+            DropPendingUpdates = options.Value.DropPendingUpdates
         };
 
         logger.LogInformation("Starting polling...");

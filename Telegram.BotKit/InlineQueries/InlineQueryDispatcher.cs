@@ -60,6 +60,7 @@ internal sealed class InlineQueryDispatcher(
             isPersonal: context.IsPersonal,
             cacheTime: context.CacheTime,
             nextOffset: context.NextOffset,
+            button: context.Button,
             cancellationToken: cancellationToken
         );
     }
