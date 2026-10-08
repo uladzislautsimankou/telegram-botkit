@@ -12,20 +12,16 @@ namespace Telegram.BotKit.Example.Services;
 /// Intercepts and routes update events before handing them off to individual framework dispatchers.
 /// </summary>
 public class GlobalUpdateHandler(
-    IServiceProvider serviceProvider,
+    ICommandDispatcher commandDispatcher,
+    ICallbackDispatcher callbackDispatcher,
+    IMessageDispatcher messageDispatcher,
+    IInlineQueryDispatcher inlineQueryDispatcher,
     ILogger<GlobalUpdateHandler> logger
     ) : IUpdateHandler
 {
     public async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Received update of type {UpdateType}.", update.Type);
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-
-        var callbackDispatcher = scope.ServiceProvider.GetRequiredService<ICallbackDispatcher>();
-        var commandDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
-        var messageDispatcher = scope.ServiceProvider.GetRequiredService<IMessageDispatcher>();
-        var inlineQueryDispatcher = scope.ServiceProvider.GetRequiredService<IInlineQueryDispatcher>();
 
         switch (update)
         {
