@@ -13,7 +13,6 @@ namespace Telegram.BotKit.Tests.InlineQueries;
 
 public sealed class InlineQueryRoutingMiddlewareTests
 {
-    private readonly IServiceProvider _serviceProvider = Substitute.For<IServiceProvider>();
     private readonly ILogger<InlineQueryRoutingMiddleware> _logger = Substitute.For<ILogger<InlineQueryRoutingMiddleware>>();
 
     // verifies that when no registered inline handlers can handle the query, the next pipeline delegate is called and results are empty
@@ -207,6 +206,6 @@ public sealed class InlineQueryRoutingMiddlewareTests
             From = new User { Id = 123, FirstName = "User" }
         };
 
-        return new InlineQueryContext(query, _serviceProvider);
+        return new InlineQueryContext(query);
     }
 }

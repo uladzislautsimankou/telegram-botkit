@@ -32,7 +32,7 @@ internal sealed class InlineQueryDispatcher(
 
         logger.LogInformation("Processing inline query from user {UserId}", query.From.Id);
 
-        var context = new InlineQueryContext(query, scope.ServiceProvider);
+        var context = new InlineQueryContext(query);
 
         var steps = pipelineBuilder.Steps;
         var resolvedMiddlewares = new IInlineQueryMiddleware[steps.Count];

@@ -50,10 +50,13 @@ public sealed class InlineQueryDispatcherTests
     {
         public async Task InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
         {
-            context.Results.Add(Substitute.For<InlineQueryResult>());
-            context.IsPersonal = true;
-            context.CacheTime = 600;
-            context.NextOffset = "page_2";
+            context.AddResults([Substitute.For<InlineQueryResult>()]);
+
+            context.MergeConfiguration(
+                isPersonal: true,
+                cacheTime: 600,
+                nextOffset: "page_2",
+                button: null);
 
             await next();
         }
