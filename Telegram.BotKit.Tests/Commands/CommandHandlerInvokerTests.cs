@@ -43,7 +43,7 @@ public sealed class CommandHandlerInvokerTests
 
         binder.Bind<DummyParams>(context).Returns(dummyParams);
 
-        var invoker = new CommandHandlerInvoker<DummyParams>(handler, binder);
+        var invoker = new CommandHandlerInvoker<TestCommandHandler, DummyParams>(handler, binder);
 
         // act
         await invoker.InvokeAsync(context, TestContext.Current.CancellationToken);
@@ -53,5 +53,7 @@ public sealed class CommandHandlerInvokerTests
         handler.WasCalled.Should().BeTrue();
         handler.CapturedParameters.Should().BeSameAs(dummyParams);
         handler.CapturedContext.Should().BeSameAs(context);
+        invoker.HandlerType.Should().Be(typeof(TestCommandHandler));
+        invoker.HandlerInstance.Should().BeSameAs(handler);
     }
 }

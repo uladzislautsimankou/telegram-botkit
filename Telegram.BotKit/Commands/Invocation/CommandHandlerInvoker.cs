@@ -7,12 +7,14 @@ namespace Telegram.BotKit.Commands.Invocation;
 /// <summary>
 /// Standard generic invoker that binds incoming parameters and routes execution to the target command handler.
 /// </summary>
-internal sealed class CommandHandlerInvoker<TParams>(
-    ICommandHandler<TParams> handler,
+internal sealed class CommandHandlerInvoker<THandler, TParams>(
+    THandler handler,
     ICommandParameterBinder binder
-    ) : ICommandHandlerInvoker where TParams : class, new()
+    ) : ICommandHandlerInvoker
+    where THandler : class, ICommandHandler<TParams>
+    where TParams : class, new()
 {
-    public Type HandlerType => typeof(ICommandHandler<TParams>);
+    public Type HandlerType => typeof(THandler);
 
     public object HandlerInstance => handler;
 

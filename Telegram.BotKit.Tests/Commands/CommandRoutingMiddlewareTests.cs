@@ -10,7 +10,6 @@ using Telegram.BotKit.Commands.Routing;
 using Telegram.BotKit.Hosting;
 using Telegram.BotKit.Shared;
 using Telegram.BotKit.Shared.Exceptions;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Telegram.BotKit.Tests.Commands;
 
@@ -22,7 +21,19 @@ public sealed class CommandRoutingMiddlewareTests
     private sealed class DummyParams1;
     private sealed class DummyParams2;
 
-    private sealed class DummyHandler;
+    private sealed class DummyHandler1 : ICommandHandler<DummyParams1>
+    {
+        public static string Command => "dummy1";
+        public Task HandleAsync(DummyParams1 parameters, CommandContext context, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class DummyHandler2 : ICommandHandler<DummyParams2>
+    {
+        public static string Command => "dummy2";
+        public Task HandleAsync(DummyParams2 parameters, CommandContext context, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
 
     public CommandRoutingMiddlewareTests()
     {
@@ -45,15 +56,16 @@ public sealed class CommandRoutingMiddlewareTests
         return provider;
     }
 
-    private (Type InvokerType, ICommandHandlerInvoker Invoker, object Handler) CreateMockInvoker<TParams>()
+    private (Type InvokerType, ICommandHandlerInvoker Invoker, object Handler) CreateMockInvoker<THandler, TParams>()
+        where THandler : class, ICommandHandler<TParams>, new()
         where TParams : class, new()
     {
-        var handler = new DummyHandler();
+        var handler = new THandler();
         var invoker = Substitute.For<ICommandHandlerInvoker>();
-        invoker.HandlerType.Returns(typeof(DummyHandler));
+        invoker.HandlerType.Returns(typeof(THandler));
         invoker.HandlerInstance.Returns(handler);
 
-        return (typeof(CommandHandlerInvoker<TParams>), invoker, handler);
+        return (typeof(CommandHandlerInvoker<THandler, TParams>), invoker, handler);
     }
 
     // verifies that the router populates matched command metadata and invokes the next pipeline step when a matching handler is registered
@@ -61,9 +73,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenCommandIsFoundInHandlerMap_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -78,7 +91,7 @@ public sealed class CommandRoutingMiddlewareTests
         // assert
         called.Should().BeTrue();
         context.MatchedCommandMetadata.Should().NotBeNull();
-        context.MatchedCommandMetadata!.HandlerType.Should().Be(typeof(DummyHandler));
+        context.MatchedCommandMetadata!.HandlerType.Should().Be(typeof(DummyHandler1));
         context.MatchedCommandMetadata.HandlerInstance.Should().BeSameAs(handler);
     }
 
@@ -87,9 +100,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenCommandMatchesAlias_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -104,7 +118,7 @@ public sealed class CommandRoutingMiddlewareTests
         // assert
         called.Should().BeTrue();
         context.MatchedCommandMetadata.Should().NotBeNull();
-        context.MatchedCommandMetadata!.HandlerType.Should().Be(typeof(DummyHandler));
+        context.MatchedCommandMetadata!.HandlerType.Should().Be(typeof(DummyHandler1));
         context.MatchedCommandMetadata.HandlerInstance.Should().BeSameAs(handler);
     }
 
@@ -113,9 +127,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenMultipleCommandAliasesAreProvided_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -138,13 +153,36 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenSimilarCommandExists_ShouldThrowCommandSuggestionsException()
     {
         // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
         var context = CreateCommandContext("bady_set", ChatType.Private);
+
+        // act
+        var act = () => middleware.InvokeAsync(context, () => Task.CompletedTask, TestContext.Current.CancellationToken);
+
+        // assert
+        var exceptionAssertion = await act.Should().ThrowAsync<CommandSuggestionsException>();
+        exceptionAssertion.Which.Suggestions.Should().Contain("bday_set");
+    }
+
+    // verifies that misspelled commands inside group chats also throw suggestion exceptions
+    [Fact]
+    public async Task InvokeAsync_WhenSimilarCommandExistsInGroupChat_ShouldThrowCommandSuggestionsException()
+    {
+        // arrange
+        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var registry = new CommandHandlerRegistry();
+        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
+
+        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var context = CreateCommandContext("bady_set", ChatType.Group);
 
         // act
         var act = () => middleware.InvokeAsync(context, () => Task.CompletedTask, TestContext.Current.CancellationToken);
@@ -159,9 +197,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenCommandIsUnknownInPrivateChat_ShouldThrowRouteNotFoundException()
     {
         // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -179,9 +218,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenCommandIsUnknownInGroupChat_ShouldIgnoreAndShortCircuit()
     {
         // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -201,9 +241,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenCommandIsTargetedAtDifferentBot_ShouldIgnoreAndShortCircuit()
     {
         // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -223,9 +264,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenVirtualRouteMatches_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -248,12 +290,13 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenVirtualRouteIsProvided_ShouldPreferVirtualRouteOverOriginalCommand()
     {
         // arrange
-        var (playInvokerType, playInvoker, _) = CreateMockInvoker<DummyParams1>();
-        var (bdayInvokerType, bdayInvoker, bdayHandler) = CreateMockInvoker<DummyParams2>();
+        var (playInvokerType, playInvoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var (bdayInvokerType, bdayInvoker, bdayHandler) = CreateMockInvoker<DummyHandler2, DummyParams2>();
 
         var registry = new CommandHandlerRegistry();
         registry.Register("play", [], playInvokerType);
         registry.Register("bday_set", [], bdayInvokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new()
         {
@@ -280,9 +323,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenVirtualRouteIsUnregistered_ShouldThrowVirtualRouteNotFoundException()
     {
         // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -303,9 +347,10 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenVirtualRouteMatchesAlias_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
@@ -330,9 +375,10 @@ public sealed class CommandRoutingMiddlewareTests
         var optionsMonitor = Substitute.For<IOptionsMonitor<TelegramBotOptions>>();
         optionsMonitor.CurrentValue.Returns(new TelegramBotOptions { IgnoredCommands = ["price"] });
 
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyParams1>();
+        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
         registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Build();
 
         var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
         var middleware = new CommandRoutingMiddleware(registry, _botInfo, optionsMonitor, serviceProvider);

@@ -45,7 +45,6 @@ internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandl
             InlineKeyboardButton.WithCallbackData("Test Callback", callbackData)
         );
 
-        // reply using the framework extension method
         await bot.SendMessage(
             chatId: context.Message.Chat.Id,
             text: responseText,

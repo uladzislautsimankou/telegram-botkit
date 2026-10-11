@@ -16,22 +16,33 @@ internal static class CommandParser
 
         // find the first space character
         var span = input.AsSpan();
-        var firstSpaceIndex = span.IndexOf(' ');
+        var firstWhitespaceIndex = -1;
+        for (var i = 1; i < span.Length; i++)
+        {
+            if (char.IsWhiteSpace(span[i]))
+            {
+                firstWhitespaceIndex = i;
+                break;
+            }
+        }
 
         ReadOnlySpan<char> fullCommandSpan;
         string rawArgs;
 
         // if there are no spaces, the command has no arguments
-        if (firstSpaceIndex == -1)
+        if (firstWhitespaceIndex == -1)
         {
             fullCommandSpan = span[1..]; // trim the leading slash (e.g., /cmd -> cmd)
             rawArgs = string.Empty;
         }
         else
         {
-            fullCommandSpan = span[1..firstSpaceIndex]; // extract the command name (e.g., /cmd arg... -> cmd)
-            rawArgs = span[(firstSpaceIndex + 1)..].ToString(); // extract raw arguments string
+            fullCommandSpan = span[1..firstWhitespaceIndex]; // extract the command name (e.g., /cmd arg... -> cmd)
+            rawArgs = span[(firstWhitespaceIndex + 1)..].ToString(); // extract raw arguments string
         }
+
+        if (fullCommandSpan.IsEmpty)
+            return (string.Empty, null, []);
 
         // check if the command targets a specific bot username (e.g., /cmd@botUsername)
         var atIndex = fullCommandSpan.IndexOf('@');

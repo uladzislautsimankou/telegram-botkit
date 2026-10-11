@@ -74,8 +74,12 @@ internal sealed class CommandRoutingMiddleware(
             throw new CommandSuggestionsException(context.Command, similar);
         }
 
-        // throw a standard exception for private chats
-        if (context.Message.Chat.Type == ChatType.Private)
+        // throw when the route is missing in private chats
+        // or when explicitly targeted at our bot
+        var isExplicitlyForUs = context.Message.Chat.Type == ChatType.Private 
+            || !string.IsNullOrEmpty(context.TargetBotUsername);
+
+        if (isExplicitlyForUs)
         {
             throw new RouteNotFoundException(context.Command);
         }

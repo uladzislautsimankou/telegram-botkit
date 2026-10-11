@@ -40,21 +40,29 @@ public sealed class CommandPipelineBuilder(IServiceCollection services)
 
         var commandProp = handlerType.GetProperty("Command", BindingFlags.Public | BindingFlags.Static)
             ?? throw new InvalidOperationException($"Type '{handlerType.Name}' must declare 'public static string Command'.");
-        var command = (string)commandProp.GetValue(null)!;
+
+        var rawCommand = commandProp.GetValue(null) as string;
+        if (string.IsNullOrWhiteSpace(rawCommand))
+        {
+            throw new InvalidOperationException($"Type '{handlerType.Name}' declares a null or empty Command trigger.");
+        }
+        var command = rawCommand.TrimStart('/');
 
         var aliasProp = handlerType.GetProperty("Aliases", BindingFlags.Public | BindingFlags.Static);
-        var aliases = (string[]?)aliasProp?.GetValue(null) ?? [];
+        var aliases = ((string[]?)aliasProp?.GetValue(null) ?? [])
+            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .Select(a => a.TrimStart('/'))
+            .ToArray();
+
+        Services.AddTransient(handlerType);
 
         foreach (var commandInterface in commandInterfaces)
         {
-            // register the handler itself under its interface ICommandHandler<TParams>
-            Services.AddTransient(commandInterface, handlerType);
-
             // extract TParams
             var paramsType = commandInterface.GetGenericArguments()[0];
 
             // dynamically create the CommandHandlerInvoker<TParams> type
-            var concreteInvokerType = typeof(CommandHandlerInvoker<>).MakeGenericType(paramsType);
+            var concreteInvokerType = typeof(CommandHandlerInvoker<,>).MakeGenericType(handlerType, paramsType);
 
             // register the type in DI and add it to the registry
             Services.AddTransient(concreteInvokerType);
@@ -107,6 +115,8 @@ public static class CommandServiceCollectionExtensions
         // configure user pipeline
         configure?.Invoke(builder);
 
+        registry.Build();
+
         // default settings if the pipeline is empty
         if (builder.Steps.Count is 0)
         {
@@ -130,9 +140,19 @@ public static class CommandServiceCollectionExtensions
     private static void RegisterHandlersAndInvokers(IServiceCollection services, Assembly assembly, CommandHandlerRegistry registry)
     {
         var genericInterfaceType = typeof(ICommandHandler<>);
-        var genericInvokerType = typeof(CommandHandlerInvoker<>);
+        var genericInvokerType = typeof(CommandHandlerInvoker<,>);
 
-        var handlerTypes = assembly.GetTypes()
+        Type[] allTypes;
+        try
+        {
+            allTypes = assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            allTypes = ex.Types.Where(t => t != null).ToArray()!;
+        }
+
+        var handlerTypes = allTypes
             .Where(t => !t.IsAbstract && !t.IsInterface)
             .SelectMany(t => t.GetInterfaces()
                 .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterfaceType)
@@ -143,16 +163,25 @@ public static class CommandServiceCollectionExtensions
         {
             var handlerType = typeInfo.Implementation;
 
-            var commandProp = handlerType.GetProperty("Command", BindingFlags.Public | BindingFlags.Static);
-            var command = (string)commandProp!.GetValue(null)!;
+            var commandProp = handlerType.GetProperty("Command", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException($"Type '{handlerType.Name}' must declare 'public static string Command'.");
+            var rawCommand = commandProp.GetValue(null) as string;
+            if (string.IsNullOrWhiteSpace(rawCommand))
+            {
+                throw new InvalidOperationException($"Type '{handlerType.Name}' declares a null or empty Command trigger.");
+            }
+            var command = rawCommand.TrimStart('/');
 
             var aliasProp = handlerType.GetProperty("Aliases", BindingFlags.Public | BindingFlags.Static);
-            var aliases = (string[]?)aliasProp?.GetValue(null) ?? [];
+            var aliases = ((string[]?)aliasProp?.GetValue(null) ?? [])
+                .Where(a => !string.IsNullOrWhiteSpace(a))
+                .Select(a => a.TrimStart('/'))
+                .ToArray();
 
-            services.AddTransient(typeInfo.Interface, handlerType);
+            services.AddTransient(handlerType);
 
             var paramsType = typeInfo.Interface.GetGenericArguments()[0];
-            var concreteInvokerType = genericInvokerType.MakeGenericType(paramsType);
+            var concreteInvokerType = genericInvokerType.MakeGenericType(handlerType, paramsType);
             services.AddTransient(concreteInvokerType);
 
             registry.Register(command, aliases, concreteInvokerType);

@@ -13,8 +13,7 @@ internal sealed class CommandHandlerRegistry
     private readonly Dictionary<string, Type> _aliasMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _commandKeys = new(StringComparer.OrdinalIgnoreCase);
 
-    private CommandSearcher? _searcher;
-    public CommandSearcher Searcher => _searcher ??= new CommandSearcher(_commandKeys);
+    public CommandSearcher Searcher { get; private set; } = null!;
 
     public void Register(string command, string[] aliases, Type invokerType)
     {
@@ -26,6 +25,8 @@ internal sealed class CommandHandlerRegistry
             _aliasMap[alias] = invokerType;
         }
     }
+
+    public void Build() => Searcher = new CommandSearcher(_commandKeys);
 
     public bool TryGetInvokerType(string key, out Type? invokerType) => _handlerMap.TryGetValue(key, out invokerType);
 
