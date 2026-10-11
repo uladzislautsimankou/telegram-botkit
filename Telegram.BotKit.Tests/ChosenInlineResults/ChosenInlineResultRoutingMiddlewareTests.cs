@@ -1,5 +1,4 @@
 ﻿using FluentAssertions;
-using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
@@ -10,18 +9,16 @@ namespace Telegram.BotKit.Tests.ChosenInlineResults;
 
 public sealed class ChosenInlineResultRoutingMiddlewareTests
 {
-    private sealed class TestChosenInlineResultHandler : IChosenInlineResultHandler
+    private sealed class TestChosenInlineResultHandler(bool canHandle) : IChosenInlineResultHandler
     {
-        private readonly bool _canHandle;
-        public TestChosenInlineResultHandler(bool canHandle) => _canHandle = canHandle;
+        public bool CanHandle(ChosenInlineResult chosenResult) => canHandle;
 
-        public bool CanHandle(ChosenInlineResult chosenResult) => _canHandle;
         public Task HandleAsync(ChosenInlineResultContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    // verifies that a matching handler is resolved and mapped to the context when criteria are satisfied
+    // verifies that a matching handler is resolved and mapped with metadata to the context when criteria are satisfied
     [Fact]
-    public async Task InvokeAsync_WhenMatchingHandlerExists_ShouldSetMatchedHandlerAndCallNext()
+    public async Task InvokeAsync_WhenMatchingHandlerExists_ShouldSetMatchedHandlerAndMetadataAndCallNext()
     {
         // arrange
         var handler = new TestChosenInlineResultHandler(canHandle: true);
@@ -36,8 +33,11 @@ public sealed class ChosenInlineResultRoutingMiddlewareTests
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
-        context.MatchedHandler.Should().BeSameAs(handler);
         called.Should().BeTrue();
+        context.MatchedHandler.Should().BeSameAs(handler);
+        context.MatchedChosenInlineResultMetadata.Should().NotBeNull();
+        context.MatchedChosenInlineResultMetadata!.HandlerType.Should().Be(typeof(TestChosenInlineResultHandler));
+        context.MatchedChosenInlineResultMetadata.HandlerInstance.Should().BeSameAs(handler);
     }
 
     // verifies that no handler is matched and the next delegate is still executed when no handler criteria are met
@@ -57,7 +57,8 @@ public sealed class ChosenInlineResultRoutingMiddlewareTests
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
-        context.MatchedHandler.Should().BeNull();
         called.Should().BeTrue();
+        context.MatchedHandler.Should().BeNull();
+        context.MatchedChosenInlineResultMetadata.Should().BeNull();
     }
 }

@@ -78,7 +78,18 @@ public static class ChosenInlineResultServiceCollectionExtensions
     {
         var handlerType = typeof(IChosenInlineResultHandler);
 
-        var concreteHandlers = assembly.GetTypes()
+        // safely retrieve loadable types even if optional dependencies fail to resolve
+        Type[] allTypes;
+        try
+        {
+            allTypes = assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            allTypes = ex.Types.Where(t => t != null).ToArray()!;
+        }
+
+        var concreteHandlers = allTypes
             .Where(t => !t.IsAbstract && !t.IsInterface && handlerType.IsAssignableFrom(t));
 
         foreach (var type in concreteHandlers)

@@ -17,6 +17,7 @@ internal sealed class ChosenInlineResultRoutingMiddleware(
             if (handler.CanHandle(context.Result))
             {
                 context.MatchedHandler = handler;
+                context.MatchedChosenInlineResultMetadata = new ChosenInlineResultMetadata(handler.GetType(), handler);
                 break;
             }
         }

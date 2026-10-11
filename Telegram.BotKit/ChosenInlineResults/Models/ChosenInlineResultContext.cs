@@ -26,6 +26,11 @@ public sealed class ChosenInlineResultContext
     public ChosenInlineResult Result { get; }
 
     /// <summary>
+    /// Gets or sets the matched handler metadata containing details about the handler instance and its resolved type.
+    /// </summary>
+    public ChosenInlineResultMetadata? MatchedChosenInlineResultMetadata { get; set; }
+
+    /// <summary>
     /// Gets or sets the matched handler instance assigned during the routing phase.
     /// </summary>
     internal IChosenInlineResultHandler? MatchedHandler { get; set; }
