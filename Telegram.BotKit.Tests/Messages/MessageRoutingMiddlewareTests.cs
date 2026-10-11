@@ -1,11 +1,11 @@
 ﻿using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
 using Telegram.BotKit.Messages.Routing;
 using Telegram.BotKit.Shared;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Telegram.BotKit.Tests.Messages;
 
@@ -29,23 +29,19 @@ public sealed class MessageRoutingMiddlewareTests
         return provider;
     }
 
-    private sealed class TestStateHandler : IMessageHandler
+    private sealed class TestStateHandler(bool canHandle) : IMessageHandler
     {
-        private readonly bool _canHandle;
-        public TestStateHandler(bool canHandle) => _canHandle = canHandle;
-
         public static string? RequiredState => "waiting_for_name";
-        public bool CanHandle(MessageContext context) => _canHandle;
+
+        public bool CanHandle(MessageContext context) => canHandle;
+
         public Task HandleAsync(MessageContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class TestGlobalHandler : IMessageHandler
+    private sealed class TestGlobalHandler(bool canHandle) : IMessageHandler
     {
-        private readonly bool _canHandle;
-        public TestGlobalHandler(bool canHandle) => _canHandle = canHandle;
+        public bool CanHandle(MessageContext context) => canHandle;
 
-        public string? RequiredState => null;
-        public bool CanHandle(MessageContext context) => _canHandle;
         public Task HandleAsync(MessageContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
@@ -81,8 +77,11 @@ public sealed class MessageRoutingMiddlewareTests
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
-        context.MatchedHandler.Should().BeSameAs(stateHandler);
         called.Should().BeTrue();
+        context.MatchedHandler.Should().BeSameAs(stateHandler);
+        context.MatchedMessageMetadata.Should().NotBeNull();
+        context.MatchedMessageMetadata!.HandlerType.Should().Be(typeof(TestStateHandler));
+        context.MatchedMessageMetadata.HandlerInstance.Should().BeSameAs(stateHandler);
     }
 
     // verifies that routing falls back to a global handler when the user is in a state but no state-specific handler can handle the context
@@ -117,8 +116,11 @@ public sealed class MessageRoutingMiddlewareTests
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
-        context.MatchedHandler.Should().BeSameAs(globalHandler);
         called.Should().BeTrue();
+        context.MatchedHandler.Should().BeSameAs(globalHandler);
+        context.MatchedMessageMetadata.Should().NotBeNull();
+        context.MatchedMessageMetadata!.HandlerType.Should().Be(typeof(TestGlobalHandler));
+        context.MatchedMessageMetadata.HandlerInstance.Should().BeSameAs(globalHandler);
     }
 
     // verifies that a global handler is mapped when the user has no active state
@@ -153,8 +155,43 @@ public sealed class MessageRoutingMiddlewareTests
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
-        context.MatchedHandler.Should().BeSameAs(globalHandler);
         called.Should().BeTrue();
+        context.MatchedHandler.Should().BeSameAs(globalHandler);
+        context.MatchedMessageMetadata.Should().NotBeNull();
+        context.MatchedMessageMetadata!.HandlerInstance.Should().BeSameAs(globalHandler);
+    }
+
+    // verifies that whitespace user state is treated as absent state and routes to a global handler
+    [Fact]
+    public async Task InvokeAsync_WhenUserStateIsWhitespace_ShouldTreatAsNoStateAndFallbackToGlobalHandler()
+    {
+        // arrange
+        var globalHandler = new TestGlobalHandler(canHandle: true);
+
+        var registry = new MessageHandlerRegistry();
+        registry.Register(typeof(TestGlobalHandler), null);
+
+        var serviceProvider = CreateMockServiceProvider(new()
+        {
+            [typeof(TestGlobalHandler)] = globalHandler
+        });
+
+        var middleware = new MessageRoutingMiddleware(registry, serviceProvider);
+
+        var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
+        var context = new MessageContext(message)
+        {
+            UserState = "   "
+        };
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeTrue();
+        context.MatchedHandler.Should().BeSameAs(globalHandler);
     }
 
     // verifies that no handler is matched and the pipeline is not executed further when no handler criteria are met
@@ -183,7 +220,8 @@ public sealed class MessageRoutingMiddlewareTests
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
-        context.MatchedHandler.Should().BeNull();
         called.Should().BeFalse();
+        context.MatchedHandler.Should().BeNull();
+        context.MatchedMessageMetadata.Should().BeNull();
     }
 }

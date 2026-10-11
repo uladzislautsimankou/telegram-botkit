@@ -18,9 +18,9 @@ internal sealed class MessageRoutingMiddleware(
         IMessageHandler? matched = null;
 
         // find a handler bound specifically to the current user state
-        if (context.UserState is not null)
+        if (!string.IsNullOrWhiteSpace(context.UserState))
         {
-            var stateHandlerTypes = registry.GetHandlerTypesForState(context.UserState);
+            var stateHandlerTypes = registry.GetHandlerTypesForState(context.UserState.Trim());
             for (var i = 0; i < stateHandlerTypes.Count; i++)
             {
                 var handler = (IMessageHandler)serviceProvider.GetRequiredService(stateHandlerTypes[i]);
@@ -50,6 +50,7 @@ internal sealed class MessageRoutingMiddleware(
         if (matched is not null)
         {
             context.MatchedHandler = matched;
+            context.MatchedMessageMetadata = new MessageMetadata(matched.GetType(), matched);
             await next();
         }
     }

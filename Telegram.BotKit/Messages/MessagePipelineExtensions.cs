@@ -31,10 +31,10 @@ public sealed class MessagePipelineBuilder(IServiceCollection services)
         var registry = GetOrCreateRegistry();
 
         var stateProp = handlerType.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
-        var requiredState = (string?)stateProp?.GetValue(null);
+        var rawState = (string?)stateProp?.GetValue(null);
+        var requiredState = string.IsNullOrWhiteSpace(rawState) ? null : rawState.Trim();
 
         registry.Register(handlerType, requiredState);
-
 
         return this;
     }
@@ -105,7 +105,18 @@ public static class MessageServiceCollectionExtensions
     {
         var handlerType = typeof(IMessageHandler);
 
-        var concreteHandlers = assembly.GetTypes()
+        // safely retrieve loadable types even if optional dependencies fail to resolve
+        Type[] allTypes;
+        try
+        {
+            allTypes = assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            allTypes = ex.Types.Where(t => t != null).ToArray()!;
+        }
+
+        var concreteHandlers = allTypes
             .Where(t => !t.IsAbstract && !t.IsInterface && handlerType.IsAssignableFrom(t));
 
         foreach (var type in concreteHandlers)
@@ -114,7 +125,8 @@ public static class MessageServiceCollectionExtensions
             services.AddTransient(handlerType, type);
 
             var stateProp = type.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
-            var requiredState = (string?)stateProp?.GetValue(null);
+            var rawState = (string?)stateProp?.GetValue(null);
+            var requiredState = string.IsNullOrWhiteSpace(rawState) ? null : rawState.Trim();
 
             registry.Register(type, requiredState);
         }

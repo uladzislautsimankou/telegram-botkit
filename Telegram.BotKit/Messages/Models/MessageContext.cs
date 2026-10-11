@@ -32,6 +32,11 @@ public record MessageContext
     public string? UserState { get; set; }
 
     /// <summary>
+    /// Gets or sets the matched message metadata containing details about the handler instance and its resolved type.
+    /// </summary>
+    public MessageMetadata? MatchedMessageMetadata { get; set; }
+
+    /// <summary>
     /// Gets or sets the matched message handler instance assigned during the routing phase to process this update.
     /// </summary>
     internal IMessageHandler? MatchedHandler { get; set; }

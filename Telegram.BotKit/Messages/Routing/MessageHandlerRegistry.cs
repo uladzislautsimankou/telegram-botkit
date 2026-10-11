@@ -5,7 +5,6 @@ namespace Telegram.BotKit.Messages.Routing;
 
 /// <summary>
 /// A thread-safe registry that groups message handler types by their required user states.
-/// Resolves metadata lazily on the first message routing request.
 /// </summary>
 internal sealed class MessageHandlerRegistry
 {
@@ -14,12 +13,13 @@ internal sealed class MessageHandlerRegistry
 
     public void Register(Type handlerType, string? requiredState)
     {
-        if (requiredState is not null)
+        if (!string.IsNullOrWhiteSpace(requiredState))
         {
-            if (!_stateHandlerTypes.TryGetValue(requiredState, out var list))
+            var trimmedState = requiredState.Trim();
+            if (!_stateHandlerTypes.TryGetValue(trimmedState, out var list))
             {
                 list = [];
-                _stateHandlerTypes[requiredState] = list;
+                _stateHandlerTypes[trimmedState] = list;
             }
             list.Add(handlerType);
         }
@@ -31,7 +31,7 @@ internal sealed class MessageHandlerRegistry
 
     public IReadOnlyList<Type> GetHandlerTypesForState(string state) => _stateHandlerTypes.TryGetValue(state, out var list)
         ? list
-        : Array.Empty<Type>();
+        : [];
 
     public IReadOnlyList<Type> GetGlobalHandlerTypes() => _globalHandlerTypes;
 }
