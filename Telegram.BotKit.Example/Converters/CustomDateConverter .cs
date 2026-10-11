@@ -7,39 +7,55 @@ namespace Telegram.BotKit.Example.Converters;
 /// </summary>
 public class CustomDateConverter : IValueConverter
 {
-    public bool TryConvert(string input, Type targetType, out object? result)
+    public object? Convert(ValueConversionContext context)
     {
-        // check if this converter supports the target type
-        if (targetType != typeof(DateTime) && targetType != typeof(DateTime?))
+        if (TryConvert(context, out var result))
         {
-            result = null;
+            return result;
+        }
+
+        throw new FormatException(
+            $"Input '{context.Input}' is not a recognized date keyword for target type '{context.TargetType.Name}'."
+        );
+    }
+
+    public bool TryConvert(ValueConversionContext context, out object? result)
+    {
+        result = null;
+        var (input, targetType, _) = context;
+
+        // unwrap nullable types (e.g. DateTime? or DateOnly?)
+        var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        // check if this converter supports the target type
+        if (actualType != typeof(DateTime) && actualType != typeof(DateTime?))
+        {
             return false;
         }
 
         // handle empty inputs safely
         if (string.IsNullOrWhiteSpace(input))
         {
-            result = null;
             return false;
         }
 
-        // evaluate special date keywords
-        var normalizedInput = input.Trim().ToLowerInvariant();
-
-        if (normalizedInput == "today")
+        // map keyword to DateTime
+        DateTime? resolvedDate = input.Trim().ToLowerInvariant() switch
         {
-            result = DateTime.Today;
-            return true;
+            "today" => DateTime.Today,
+            "tomorrow" => DateTime.Today.AddDays(1),
+            _ => null
+        };
+
+        if (resolvedDate is null)
+        {
+            return false;
         }
 
-        if (normalizedInput == "tomorrow")
-        {
-            result = DateTime.Today.AddDays(1);
-            return true;
-        }
+        result = actualType == typeof(DateOnly)
+            ? DateOnly.FromDateTime(resolvedDate.Value)
+            : resolvedDate.Value;
 
-        // defer to next standard converter
-        result = null;
-        return false;
+        return true;
     }
 }

@@ -1,100 +1,66 @@
-﻿using System.ComponentModel;
-using System.Globalization;
+﻿using Telegram.BotKit.Shared.Converters.Strategies;
 
 namespace Telegram.BotKit.Shared.Converters;
 
-/// <summary>
-/// Default system value converter supporting standard primitives, enums, dates, and nullable types.
-/// </summary>
-internal class DefaultValueConverter : IValueConverter
+internal class DefaultValueConverter() : IValueConverter
 {
-    private static readonly string[] _dateFormats =
+    private static readonly IConversionStrategy[] _strategies =
     [
-        "yyyy-MM-dd", // ISO
-        "MM/dd/yyyy", // US (standard Invariant)
-        "dd.MM.yyyy", // RU/EU (31.12.2025)
-        "dd-MM-yyyy", // RU/EU (31-12-2025)
-        "yyyy/MM/dd"  // alternative ISO
+        new EnumConversionStrategy(),
+        new DateTimeConversionStrategy(),
+        new DateOnlyConversionStrategy(),
+        new TimeOnlyConversionStrategy(),
+        new TypeDescriptorConversionStrategy()
     ];
 
-    public bool TryConvert(string input, Type targetType, out object? result)
+    public object? Convert(ValueConversionContext context)
     {
-        result = null;
+        var input = context.Input;
+        var targetType = context.TargetType;
+
+        if (targetType == typeof(string))
+        {
+            return input;
+        }
 
         if (string.IsNullOrWhiteSpace(input))
         {
             if (IsNullable(targetType))
             {
-                return true;
+                return null;
             }
 
-            return false;
+            throw new FormatException($"Cannot convert empty string to non-nullable type '{targetType.Name}'.");
         }
 
-        // remove the nullable wrapper (e.g., int? to int) to allow TypeDescriptor to work correctly
         var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
-        // if the target type is already a string, no conversion is required
-        if (actualType == typeof(string))
+        foreach (var strategy in _strategies)
         {
-            result = input;
-            return true;
-        }
-
-        if (actualType.IsEnum)
-        {
-            // attempt to parse the enum and verify that the member is explicitly defined
-            if (!Enum.TryParse(actualType, input, true, out var enumResult) || !Enum.IsDefined(actualType, enumResult))
+            if (strategy.CanConvert(actualType))
             {
-                throw new FormatException($"Value '{input}' is not a valid member of enum '{actualType.Name}'.");
-            }
-
-            result = enumResult;
-            return true;
-        }
-
-        if (actualType == typeof(DateTime))
-        {
-            // attempt to parse the string using the supported date formats
-            if (!DateTime.TryParseExact(input, _dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            {
-                throw new FormatException($"String '{input}' was not recognized as a valid DateTime. Supported formats: {string.Join(", ", _dateFormats)}");
-            }
-
-            result = date;
-            return true;
-        }
-
-        var converter = TypeDescriptor.GetConverter(actualType);
-
-        if (converter != null && converter.CanConvertFrom(typeof(string)))
-        {
-            try
-            {
-                if (IsFloatingPoint(actualType))
-                {
-                    input = input.Replace(',', '.');
-                }
-
-                result = converter.ConvertFromInvariantString(input);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                throw new FormatException($"Failed to convert value '{input}' to type '{actualType.Name}'.", ex);
+                return strategy.Convert(input, actualType);
             }
         }
 
-        return false;
+        throw new NotSupportedException($"No conversion strategy found for target type '{targetType.Name}'.");
     }
 
-    private static bool IsFloatingPoint(Type type) =>
-        type == typeof(double) || type == typeof(float) || type == typeof(decimal);
-
-    private static bool IsNullable(Type type)
+    public bool TryConvert(ValueConversionContext context, out object? result)
     {
-        // !IsValueType indicates a reference type (string, class)
-        // Nullable.GetUnderlyingType != null indicates a nullable value type (int?)
-        return !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
+        result = null;
+
+        try
+        {
+            result = Convert(context);
+            return true;
+        }
+        catch (Exception ex) when (ex is FormatException or NotSupportedException)
+        {
+            return false;
+        }
     }
+
+    private static bool IsNullable(Type type) =>
+        !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
 }

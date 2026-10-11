@@ -54,14 +54,14 @@ public sealed partial class ValueConverterTests
 
     // verifies that an invalid integer string throws a format exception
     [Fact]
-    public void TryConvert_WhenIntIsInvalid_ShouldThrowFormatException()
+    public void Convert_WhenIntIsInvalid_ShouldThrowFormatException()
     {
         // arrange
         var invalidInt = "not-a-number";
         var targetType = typeof(int);
 
         // act
-        var act = () => _converter.TryConvert(invalidInt, targetType, out _);
+        var act = () => _converter.Convert(invalidInt, targetType);
 
         // assert
         act.Should().Throw<FormatException>();
@@ -99,9 +99,9 @@ public sealed partial class ValueConverterTests
         result.Should().BeNull();
     }
 
-    // verifies that empty input returns success and null for reference types like strings
+    // verifies that empty input remains an empty string when target type is string
     [Fact]
-    public void TryConvert_WhenInputIsEmptyAndTypeIsString_ShouldReturnTrueAndNull()
+    public void TryConvert_WhenInputIsEmptyAndTypeIsString_ShouldReturnEmptyString()
     {
         // arrange
         var input = "";
@@ -112,7 +112,7 @@ public sealed partial class ValueConverterTests
 
         // assert
         success.Should().BeTrue();
-        result.Should().BeNull();
+        result.Should().Be("");
     }
 
     // verifies that empty input fails when attempting to bind to non-nullable value types
@@ -167,14 +167,14 @@ public sealed partial class ValueConverterTests
 
     // verifies that converting an invalid value for a type with a default descriptor throws format exception
     [Fact]
-    public void TryConvert_WhenConversionFails_ShouldThrowFormatException()
+    public void Convert_WhenConversionFails_ShouldThrowFormatException()
     {
         // arrange
         var input = "not-a-boolean";
         var targetType = typeof(bool);
 
         // act
-        var act = () => _converter.TryConvert(input, targetType, out _);
+        var act = () => _converter.Convert(input, targetType);
 
         // assert
         act.Should().Throw<FormatException>();

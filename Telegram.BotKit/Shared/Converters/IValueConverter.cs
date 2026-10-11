@@ -6,23 +6,27 @@
 public interface IValueConverter
 {
     /// <summary>
-    /// Attempts to convert a string value to the specified target type.
+    /// Converts input within the given context into the target type.
     /// </summary>
-    /// <param name="input">The input string value to convert.</param>
-    /// <param name="targetType">The target type to convert the value to.</param>
-    /// <param name="result">When this method returns, contains the converted value if the conversion succeeded.</param>
-    /// <returns><c>true</c> if the conversion was successful; <c>false</c> if this converter cannot handle the specified type or input.</returns>
-    bool TryConvert(string input, Type targetType, out object? result);
+    /// <exception cref="FormatException">Thrown when the input format is invalid.</exception>
+    /// <exception cref="NotSupportedException">Thrown when conversion to the target type is not supported.</exception>
+    object? Convert(ValueConversionContext context);
 
     /// <summary>
-    /// Attempts to convert a string value using rich context information (e.g., dependency injection services, target object instance).
-    /// <para>
-    /// The default implementation delegates to <see cref="TryConvert(string, Type, out object?)"/> for backward compatibility.
-    /// Override this method if you need access to <see cref="ValueConversionContext.Services"/> (e.g., for database lookups) or <see cref="ValueConversionContext.TargetObject"/> (for cross-property validation).
-    /// </para>
+    /// Attempts to convert input within the given context into the target type without throwing exceptions.
     /// </summary>
-    /// <param name="context">The context containing the input value, target type, and additional binding metadata.</param>
-    /// <param name="result">When this method returns, contains the converted value if the conversion succeeded.</param>
-    /// <returns><c>true</c> if the conversion was successful; <c>false</c> if this converter cannot handle the specified type or input.</returns>
-    bool TryConvert(ValueConversionContext context, out object? result) => TryConvert(context.Input, context.TargetType, out result);
+    /// <returns><c>true</c> if the conversion succeeded; otherwise, <c>false</c>.</returns>
+    bool TryConvert(ValueConversionContext context, out object? result);
+
+    /// <summary>
+    /// Convenience shortcut for direct value conversion.
+    /// </summary>
+    object? Convert(string input, Type targetType, object? targetObject = null) =>
+        Convert(new ValueConversionContext(input, targetType, targetObject));
+
+    /// <summary>
+    /// Convenience shortcut for safe value conversion.
+    /// </summary>
+    bool TryConvert(string input, Type targetType, out object? result) =>
+        TryConvert(new ValueConversionContext(input, targetType), out result);
 }

@@ -1,15 +1,13 @@
 ﻿namespace Telegram.BotKit.Shared.Converters;
 
 /// <summary>
-/// Provides context information for value conversion.
+/// Provides contextual information for value conversion.
 /// </summary>
 /// <param name="Input">The raw string input to convert.</param>
-/// <param name="TargetType">The type of the property being bound.</param>
-/// <param name="Services">The service provider for resolving dependencies.</param>
-/// <param name="TargetObject">The instance of the DTO object being populated. Useful for cross-property dependencies.</param>
+/// <param name="TargetType">The target property or argument type.</param>
+/// <param name="TargetObject">The instance of the model/DTO being populated (useful for cross-property dependencies).</param>
 public record ValueConversionContext(
     string Input,
     Type TargetType,
-    object TargetObject,
-    IServiceProvider? Services = null
+    object? TargetObject = null
 );
