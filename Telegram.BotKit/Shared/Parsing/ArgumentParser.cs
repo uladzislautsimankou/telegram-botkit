@@ -1,44 +1,96 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text;
+using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Helpers;
 
-internal static partial class ArgumentParser
+internal static class ArgumentParser
 {
-    // regex explanation:
-    // ([^\s=]+)="([^"]*)"  named parameter with quotes key="val val" (Group[1] = key, Group[2] = val val)
-    // "([^"]*)"            positional parameter with quotes "val val" (Group[3] = val val)
-    // (\S+)                standard parameter val or key=val (Group[4] or raw Value)
-    [GeneratedRegex(@"([^\s=]+)=""([^""]*)""|""([^""]*)""|(\S+)")]
-    private static partial Regex ArgsRegex();
-
+    /// <summary>
+    /// Parses a raw argument string into a list of individual arguments while handling quotations,
+    /// escape sequences, and key-value bindings.
+    /// </summary>
+    /// <remarks>
+    /// Supported formats include plain positional tokens such as value,
+    /// standard named parameters such as key=value,
+    /// quoted positional tokens with spaces such as "value with spaces" or «value with spaces»,
+    /// and quoted named parameters such as key="value with spaces".
+    /// </remarks>
+    /// <param name="rawArgs">The raw input argument string provided by the user.</param>
+    /// <returns>A list of parsed argument strings.</returns>
+    /// <exception cref="InputParsingException">Thrown when an unclosed quotation mark is detected.</exception>
     public static List<string> ParseArgs(string rawArgs)
     {
         if (string.IsNullOrWhiteSpace(rawArgs))
-            return new();
+            return [];
 
-        var matches = ArgsRegex().Matches(rawArgs);
-        var results = new List<string>(matches.Count);
+        var results = new List<string>();
+        var current = new StringBuilder(rawArgs.Length);
+        var inQuotes = false;
+        var isEscaped = false;
+        var hasToken = false;
 
-        foreach (Match m in matches)
+        for (var i = 0; i < rawArgs.Length; i++)
         {
-            // if the argument is a named parameter with quotes: key="val val"
-            // extract the value from the quotes and format it back as key=val val
-            if (m.Groups[1].Success)
+            var c = rawArgs[i];
+
+            // normalize typographical and mobile quotation marks to standard double quotes
+            if (c is '«' or '»' or '“' or '”' or '„')
+                c = '"';
+
+            // handle escaped characters such as escaped quotes or backslashes
+            if (isEscaped)
             {
-                results.Add($"{m.Groups[1].Value}={m.Groups[2].Value}");
+                current.Append(c);
+                isEscaped = false;
+                hasToken = true;
                 continue;
             }
 
-            // if it is a positional parameter with quotes: "val val"
-            // extract the inner unquoted string
-            if (m.Groups[3].Success)
+            if (c == '\\')
             {
-                results.Add(m.Groups[3].Value);
+                isEscaped = true;
                 continue;
             }
 
-            // otherwise, add the entire matched plain word (e.g., val or key=val)
-            results.Add(m.Value);
+            // toggle quoted string state without appending the quote delimiter itself
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+                hasToken = true;
+                continue;
+            }
+
+            // word delimiter outside of quotation marks
+            if (char.IsWhiteSpace(c) && !inQuotes)
+            {
+                if (hasToken)
+                {
+                    results.Add(current.ToString());
+                    current.Clear();
+                    hasToken = false;
+                }
+                continue;
+            }
+
+            current.Append(c);
+            hasToken = true;
+        }
+
+        // handle trailing backslash if present at the end of input
+        if (isEscaped)
+        {
+            current.Append('\\');
+            hasToken = true;
+        }
+
+        if (inQuotes)
+        {
+            throw new InputParsingException(rawArgs, "Unclosed quotation mark detected in arguments.");
+        }
+
+        if (hasToken)
+        {
+            results.Add(current.ToString());
         }
 
         return results;
