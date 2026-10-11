@@ -10,7 +10,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     permissions:
       packages: write
       contents: read
@@ -18,71 +17,51 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-          fetch-depth: 0
-          fetch-tags: true
+        fetch-depth: 0
+        fetch-tags: true
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.0.x
 
-    - name: Restore dependencies
+    - name: Restore
       run: dotnet restore
-    
-      # собираем
+
     - name: Build
       run: dotnet build --no-restore --configuration Release
 
-      # тесты
     - name: Test
       run: dotnet test Telegram.BotKit.Tests/Telegram.BotKit.Tests.csproj --no-build --configuration Release --verbosity normal
 
-      # определяем версию
-    - name: Determine Version
-      id: versioning
+    # Публикуем только теги v* и пуши в ветку preview
+    - name: Decide publish
+      id: decide
       run: |
-        # базовая версия из csproj
-        BASE_VERSION=$(grep -oE '<Version>[^<]+</Version>' Telegram.BotKit/Telegram.BotKit.csproj | sed 's/<Version>//g' | sed 's/<\/Version>//g' | head -n 1)
-
-        # если ветка preview, собираем автоматический превью-пакет (2.0.0-preview.42)
-        if [ "${{ github.ref_name }}" = "preview" ]; then
-          echo "PACKAGE_VERSION=${BASE_VERSION}-preview.${{ github.run_number }}" >> $GITHUB_ENV
-          echo "SHOULD_PUBLISH=true" >> $GITHUB_ENV
-
-        # если тег v1.5.0 - отрезаем 'v' и получаем 1.5.0
-        elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-          TAG_VERSION="${{ github.ref_name }}"
-          echo "PACKAGE_VERSION=${TAG_VERSION#v}" >> $GITHUB_ENV
-          echo "SHOULD_PUBLISH=true" >> $GITHUB_ENV
-
-        # просто коммит или пр - публикация не нужна
+        if [[ "${GITHUB_REF}" == refs/tags/v* ]] || [ "${GITHUB_REF_NAME}" = "preview" ]; then
+          echo "publish=true" >> $GITHUB_OUTPUT
         else
-          echo "PACKAGE_VERSION=${BASE_VERSION}" >> $GITHUB_ENV
-          echo "SHOULD_PUBLISH=false" >> $GITHUB_ENV
+          echo "publish=false" >> $GITHUB_OUTPUT
         fi
 
-      # пакуем библиотеку
     - name: Pack
-      if: env.SHOULD_PUBLISH == 'true'
+      if: steps.decide.outputs.publish == 'true'
       run: |
         dotnet pack Telegram.BotKit/Telegram.BotKit.csproj \
           --no-build \
           --configuration Release \
-          -p:Version=${{ env.PACKAGE_VERSION }} \
           --output ./nupkgs
 
-      # публикуем в GitHub Packages
     - name: Publish to GitHub Packages
-      if: env.SHOULD_PUBLISH == 'true'
+      if: steps.decide.outputs.publish == 'true'
       run: |
         dotnet nuget push ./nupkgs/*.nupkg \
           --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json \
           --api-key ${{ secrets.GITHUB_TOKEN }} \
           --skip-duplicate
 
-      # публикуем в NuGet
     - name: Publish to NuGet.org
-      if: env.SHOULD_PUBLISH == 'true'
+      if: steps.decide.outputs.publish == 'true'
       run: |
         dotnet nuget push ./nupkgs/*.nupkg \
           --source https://api.nuget.org/v3/index.json \
