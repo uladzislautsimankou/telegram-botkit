@@ -20,7 +20,9 @@ internal sealed class InlineQueryDispatcher(
     public async Task DispatchAsync(InlineQuery query, CancellationToken cancellationToken = default)
     {
         if (query is null)
+        {
             return;
+        }
 
         using var scope = serviceProvider.CreateScope();
         using var logScope = logger.BeginScope(new Dictionary<string, object>
@@ -53,16 +55,23 @@ internal sealed class InlineQueryDispatcher(
             logger.LogError(ex, "Critical failure during inline query pipeline execution");
         }
 
-        // send final aggregated response
-        await botClient.AnswerInlineQuery(
-            inlineQueryId: query.Id,
-            results: context.Results,
-            isPersonal: context.IsPersonal,
-            cacheTime: context.CacheTime,
-            nextOffset: context.NextOffset,
-            button: context.Button,
-            cancellationToken: cancellationToken
-        );
+        // send final aggregated response to telegram
+        try
+        {
+            await botClient.AnswerInlineQuery(
+                inlineQueryId: query.Id,
+                results: context.Results,
+                isPersonal: context.IsPersonal,
+                cacheTime: context.CacheTime,
+                nextOffset: context.NextOffset,
+                button: context.Button,
+                cancellationToken: cancellationToken
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send inline query answer for query {InlineQueryId}", query.Id);
+        }
     }
 
     private sealed class PipelineRunner(

@@ -11,7 +11,7 @@ public interface IInlineQueryHandler
     /// <summary>
     /// Determines whether this handler can process the incoming inline query in the specified context.
     /// </summary>
-    /// <param name="context">The incoming inline query.</param>
+    /// <param name="query">The incoming inline query.</param>
     /// <returns><see langword="true"/> if this handler can process the request; otherwise, <see langword="false"/>.</returns>
     bool CanHandle(InlineQuery query);
 

@@ -1,6 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using System.Reflection;
-using Telegram.Bot;
+﻿using System.Reflection;
 using Telegram.BotKit.InlineQueries;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Routing;
@@ -21,7 +19,7 @@ public sealed class InlineQueryPipelineBuilder(IServiceCollection services)
     }
 }
 
-public static class ServiceCollectionExtensions
+public static class InlineQueryServiceCollectionExtensions
 {
     /// <summary>
     /// Configures the inline query pipeline and automatically registers all handlers from assemblies.
@@ -54,7 +52,6 @@ public static class ServiceCollectionExtensions
 
         // register pipeline builder and dispatcher
         services.AddSingleton(builder);
-
         services.AddSingleton<IInlineQueryDispatcher, InlineQueryDispatcher>();
 
         return services;
@@ -64,7 +61,18 @@ public static class ServiceCollectionExtensions
     {
         var handlerType = typeof(IInlineQueryHandler);
 
-        var concreteHandlers = assembly.GetTypes()
+        // safely retrieve loadable types even if optional dependencies fail to resolve
+        Type[] allTypes;
+        try
+        {
+            allTypes = assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            allTypes = ex.Types.Where(t => t != null).ToArray()!;
+        }
+
+        var concreteHandlers = allTypes
             .Where(t => !t.IsAbstract && !t.IsInterface && handlerType.IsAssignableFrom(t));
 
         foreach (var type in concreteHandlers)

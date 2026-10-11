@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Telegram.Bot;
@@ -175,6 +176,40 @@ public sealed class InlineQueryDispatcherTests
         await _botClient.DidNotReceiveWithAnyArgs().SendRequest(
             Arg.Any<IRequest<bool>>(),
             Arg.Any<CancellationToken>()
+        );
+    }
+
+    // verifies that if sending the answer fails the exception is caught and logged without crashing the dispatcher
+    [Fact]
+    public async Task DispatchAsync_WhenAnswerInlineQueryThrows_ShouldCatchAndLogErrorWithoutRethrowing()
+    {
+        // arrange
+        _botClient.SendRequest(Arg.Any<IRequest<bool>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<bool>(new HttpRequestException("Network failure")));
+
+        var services = new ServiceCollection();
+        var pipelineBuilder = new InlineQueryPipelineBuilder(services);
+        var serviceProvider = CreateMockServiceProvider([]);
+        var dispatcher = new InlineQueryDispatcher(_botClient, serviceProvider, pipelineBuilder, _logger);
+        var query = new InlineQuery
+        {
+            Id = "query_123",
+            Query = "search",
+            From = new User { Id = 456, FirstName = "User" }
+        };
+
+        // act
+        var act = () => dispatcher.DispatchAsync(query, TestContext.Current.CancellationToken);
+
+        // assert
+        await act.Should().NotThrowAsync();
+
+        _logger.Received(1).Log(
+            LogLevel.Error,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("Failed to send inline query answer")),
+            Arg.Is<Exception>(ex => ex is HttpRequestException),
+            Arg.Any<Func<object, Exception?, string>>()
         );
     }
 }

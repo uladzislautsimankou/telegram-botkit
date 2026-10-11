@@ -32,7 +32,7 @@ internal sealed class InlineQueryRoutingMiddleware(
             return;
         }
 
-        // if only one handler matched, invoke it directly to avoid Task.WhenAll allocations
+        // if only one handler matched, invoke it directly to avoid task allocation overhead
         if (activeHandlers.Count is 1)
         {
             var handler = activeHandlers[0];
@@ -62,23 +62,30 @@ internal sealed class InlineQueryRoutingMiddleware(
         await next();
     }
 
-    private void ApplyBatch(InlineQueryContext context, InlineQueryBatch batch, string handlerName)
+    private void ApplyBatch(InlineQueryContext context, InlineQueryBatch? batch, string handlerName)
     {
-        context.AddResults(batch.Results);
-
-        if (batch.Button is not null && context.HasButton)
+        if (batch is null)
         {
-            logger.LogWarning(
-                "Conflict: Multiple inline query handlers provided a button. " +
-                "Overwriting previous button with the one from '{HandlerName}'",
-                handlerName);
+            return;
         }
 
-        context.MergeConfiguration(
+        if (batch.Results is not null)
+        {
+            context.AddResults(batch.Results);
+        }
+
+        var hasConflict = context.MergeConfiguration(
             isPersonal: batch.IsPersonal,
             cacheTime: batch.CacheTime,
             nextOffset: batch.NextOffset,
             button: batch.Button);
+
+        if (hasConflict)
+        {
+            logger.LogWarning(
+                "Conflict: Multiple inline query handlers provided a button. Overwriting previous button with the one from '{HandlerName}'",
+                handlerName);
+        }
     }
 
     private async Task InvokeHandlerSafeAsync(InlineQueryContext context, IInlineQueryHandler handler, CancellationToken cancellationToken)
