@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics;
@@ -139,10 +140,24 @@ public sealed class BotBuilder
                 routePath = webhookUri.AbsolutePath;
             }
 
-            app.MapPost(routePath, async (Update update, IUpdateHandler updateHandler, ITelegramBotClient botClient, CancellationToken ct) =>
+            app.MapPost(routePath, async (
+                HttpContext context,
+                Update update,
+                IUpdateHandler updateHandler,
+                ITelegramBotClient botClient,
+                CancellationToken cancellationToken) =>
             {
-                await updateHandler.HandleUpdateAsync(botClient, update, ct);
-                return Microsoft.AspNetCore.Http.Results.Ok();
+                if (!string.IsNullOrEmpty(opts.SecretToken))
+                {
+                    if (!context.Request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var headerToken)
+                        || headerToken != opts.SecretToken)
+                    {
+                        return Results.Unauthorized();
+                    }
+                }
+
+                await updateHandler.HandleUpdateAsync(botClient, update, cancellationToken);
+                return Results.Ok();
             });
 
             host = app;
