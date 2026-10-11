@@ -41,20 +41,25 @@ public sealed class CallbackPipelineBuilder(IServiceCollection services) : Pipel
         var keyProp = handlerType.GetProperty("Key", BindingFlags.Public | BindingFlags.Static)
             ?? throw new InvalidOperationException($"Type '{handlerType.Name}' must declare 'public static string Key'.");
 
-        var key = (string)keyProp.GetValue(null)!;
+        var rawKey = keyProp.GetValue(null) as string;
+        if (string.IsNullOrWhiteSpace(rawKey))
+        {
+            throw new InvalidOperationException($"Type '{handlerType.Name}' declares a null or empty Key trigger.");
+        }
+
+        var key = rawKey.Trim();
 
         foreach (var callbackInterface in callbackInterfaces)
         {
-            // register the handler itself under its interface ICallbackHandler<TParams>
-            Services.AddTransient(callbackInterface, handlerType);
+            // register the concrete handler class in the dependency container
+            Services.AddTransient(handlerType);
 
-            // extract TParams
-            var paramsType = callbackInterface.GetGenericArguments();
+            // extract TParams from ICallbackHandler<TParams>
+            var paramsType = callbackInterface.GetGenericArguments()[0];
 
-            // dynamically create the CallbackHandlerInvoker<TParams> type
-            var concreteInvokerType = typeof(CallbackHandlerInvoker<>).MakeGenericType(paramsType);
+            // create a closed invoker type tied directly to the handler and parameter pair
+            var concreteInvokerType = typeof(CallbackHandlerInvoker<,>).MakeGenericType(handlerType, paramsType);
 
-            // register the type in DI and add it to the registry
             Services.AddTransient(concreteInvokerType);
             registry.Register(key, concreteInvokerType);
         }
@@ -128,10 +133,20 @@ public static class CallbackServiceCollectionExtensions
     private static void RegisterHandlersAndInvokers(IServiceCollection services, Assembly assembly, CallbackHandlerRegistry registry)
     {
         var genericInterfaceType = typeof(ICallbackHandler<>);
-        var genericInvokerType = typeof(CallbackHandlerInvoker<>);
+        var genericInvokerType = typeof(CallbackHandlerInvoker<,>);
 
-        var handlerTypes = assembly
-            .GetTypes()
+        // safely retrieve loadable types even if optional dependencies fail to resolve
+        Type[] allTypes;
+        try
+        {
+            allTypes = assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            allTypes = ex.Types.Where(t => t != null).ToArray()!;
+        }
+
+        var handlerTypes = allTypes
             .Where(t => !t.IsAbstract && !t.IsInterface)
             .SelectMany(t => t.GetInterfaces()
                 .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterfaceType)
@@ -142,19 +157,26 @@ public static class CallbackServiceCollectionExtensions
         {
             var handlerType = typeInfo.Implementation;
 
-            var keyProp = handlerType.GetProperty("Key", BindingFlags.Public | BindingFlags.Static);
-            var key = (string)keyProp!.GetValue(null)!;
+            var keyProp = handlerType.GetProperty("Key", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException($"Type '{handlerType.Name}' must declare 'public static string Key'.");
 
-            // register the handler under its closed interface (e.g., ICallbackHandler<StartParams>)
-            services.AddTransient(typeInfo.Interface, typeInfo.Implementation);
+            var rawKey = keyProp.GetValue(null) as string;
+            if (string.IsNullOrWhiteSpace(rawKey))
+            {
+                throw new InvalidOperationException($"Type '{handlerType.Name}' declares a null or empty Key trigger.");
+            }
+
+            var key = rawKey.Trim();
+
+            // register the concrete handler class
+            services.AddTransient(handlerType);
 
             // extract TParams from ICallbackHandler<TParams>
-            var paramsType = typeInfo.Interface.GetGenericArguments();
+            var paramsType = typeInfo.Interface.GetGenericArguments()[0];
 
-            // create a closed invoker type: CallbackHandlerInvoker<StartParams>
-            var concreteInvokerType = genericInvokerType.MakeGenericType(paramsType);
+            // create a closed invoker type: CallbackHandlerInvoker<THandler, TParams>
+            var concreteInvokerType = genericInvokerType.MakeGenericType(handlerType, paramsType);
 
-            // register the invoker and add it to the registry
             services.AddTransient(concreteInvokerType);
             registry.Register(key, concreteInvokerType);
         }

@@ -10,10 +10,8 @@ namespace Telegram.BotKit.Callbacks.Models;
 public record CallbackContext
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="CallbackContext"/> class.
-    /// Parses the raw query data string into a routing key and unescaped query parameter arguments.
+    /// Initializes a new instance of the callback context by parsing raw callback query data.
     /// </summary>
-    /// <param name="query">The raw callback query received from the Telegram Bot API.</param>
     public CallbackContext(CallbackQuery query)
     {
         Query = query;
@@ -38,6 +36,11 @@ public record CallbackContext
     /// Gets the collection of raw, unescaped parameter arguments parsed from the query string format of the callback data.
     /// </summary>
     public Dictionary<string, string> RawParams { get; }
+
+    /// <summary>
+    /// Gets or sets the matched callback metadata containing details about the handler instance and its resolved type.
+    /// </summary>
+    public CallbackMetadata? MatchedCallbackMetadata { get; set; }
 
     /// <summary>
     /// Gets or sets the resolved callback handler invoker matched and instantiated during routing.

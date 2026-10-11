@@ -43,7 +43,7 @@ public sealed class CallbackHandlerInvokerTests
 
         binder.Bind<DummyParams>(context).Returns(dummyParams);
 
-        var invoker = new CallbackHandlerInvoker<DummyParams>(handler, binder);
+        var invoker = new CallbackHandlerInvoker<TestCallbackHandler, DummyParams>(handler, binder);
 
         // act
         await invoker.InvokeAsync(context, TestContext.Current.CancellationToken);
@@ -53,5 +53,8 @@ public sealed class CallbackHandlerInvokerTests
         handler.WasCalled.Should().BeTrue();
         handler.CapturedParameters.Should().BeSameAs(dummyParams);
         handler.CapturedContext.Should().BeSameAs(context);
+
+        invoker.HandlerType.Should().Be(typeof(TestCallbackHandler));
+        invoker.HandlerInstance.Should().BeSameAs(handler);
     }
 }

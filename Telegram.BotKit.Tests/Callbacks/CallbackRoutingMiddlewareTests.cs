@@ -6,21 +6,16 @@ using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Callbacks.Routing;
 using Telegram.BotKit.Shared;
 using Telegram.BotKit.Shared.Exceptions;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Telegram.BotKit.Tests.Callbacks;
 
 public sealed class CallbackRoutingMiddlewareTests
 {
+    private sealed class DummyHandler;
+
     private IServiceProvider CreateMockServiceProvider(Dictionary<Type, object> services)
     {
         var provider = Substitute.For<IServiceProvider>();
-        var scope = Substitute.For<IServiceScope>();
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-
-        provider.GetService(typeof(IServiceScopeFactory)).Returns(scopeFactory);
-        scopeFactory.CreateScope().Returns(scope);
-        scope.ServiceProvider.Returns(provider);
 
         foreach (var (type, instance) in services)
         {
@@ -30,12 +25,22 @@ public sealed class CallbackRoutingMiddlewareTests
         return provider;
     }
 
-    // verifies that a callback with an exact key match assigns the matched invoker to the context and continues the pipeline
+    private (ICallbackHandlerInvoker Invoker, DummyHandler Handler) CreateMockInvoker()
+    {
+        var handler = new DummyHandler();
+        var invoker = Substitute.For<ICallbackHandlerInvoker>();
+        invoker.HandlerType.Returns(typeof(DummyHandler));
+        invoker.HandlerInstance.Returns(handler);
+
+        return (invoker, handler);
+    }
+
+    // verifies that a callback with an exact key match assigns the matched invoker and metadata to the context and continues the pipeline
     [Fact]
-    public async Task InvokeAsync_WhenCallbackKeyMatchesExactly_ShouldAssignInvokerAndCallNext()
+    public async Task InvokeAsync_WhenCallbackKeyMatchesExactly_ShouldAssignInvokerAndMetadataAndCallNext()
     {
         // arrange
-        var invoker = Substitute.For<ICallbackHandlerInvoker>();
+        var (invoker, handler) = CreateMockInvoker();
         var registry = new CallbackHandlerRegistry();
         registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
 
@@ -55,14 +60,17 @@ public sealed class CallbackRoutingMiddlewareTests
         // assert
         called.Should().BeTrue();
         context.MatchedInvoker.Should().BeSameAs(invoker);
+        context.MatchedCallbackMetadata.Should().NotBeNull();
+        context.MatchedCallbackMetadata!.HandlerType.Should().Be(typeof(DummyHandler));
+        context.MatchedCallbackMetadata.HandlerInstance.Should().BeSameAs(handler);
     }
 
-    // verifies that a callback key containing parameters is successfully resolved and matched
+    // verifies that a callback key containing parameters is successfully resolved and metadata is populated
     [Fact]
-    public async Task InvokeAsync_WhenCallbackKeyMatchesWithParameters_ShouldAssignInvokerAndCallNext()
+    public async Task InvokeAsync_WhenCallbackKeyMatchesWithParameters_ShouldAssignInvokerAndMetadataAndCallNext()
     {
         // arrange
-        var invoker = Substitute.For<ICallbackHandlerInvoker>();
+        var (invoker, handler) = CreateMockInvoker();
         var registry = new CallbackHandlerRegistry();
         registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
 
@@ -82,6 +90,8 @@ public sealed class CallbackRoutingMiddlewareTests
         // assert
         called.Should().BeTrue();
         context.MatchedInvoker.Should().BeSameAs(invoker);
+        context.MatchedCallbackMetadata.Should().NotBeNull();
+        context.MatchedCallbackMetadata!.HandlerInstance.Should().BeSameAs(handler);
     }
 
     // verifies that an unknown callback trigger throws a route not found exception
@@ -89,7 +99,7 @@ public sealed class CallbackRoutingMiddlewareTests
     public async Task InvokeAsync_WhenCallbackKeyIsUnknown_ShouldThrowRouteNotFoundException()
     {
         // arrange
-        var invoker = Substitute.For<ICallbackHandlerInvoker>();
+        var (invoker, _) = CreateMockInvoker();
         var registry = new CallbackHandlerRegistry();
         registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
 

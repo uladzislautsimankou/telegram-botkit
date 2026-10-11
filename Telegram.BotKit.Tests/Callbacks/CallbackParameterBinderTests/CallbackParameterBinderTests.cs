@@ -123,4 +123,18 @@ public sealed partial class CallbackParameterBinderTests
         act.Should().Throw<InvalidParameterTypeException>()
             .Which.ParameterName.Should().Be("a");
     }
+
+    // verifies that empty query parameter values are mapped to empty strings for string properties
+    [Fact]
+    public void Bind_WhenEmptyStringValueIsProvided_ShouldMapToEmptyString()
+    {
+        // arrange
+        var ctx = CreateContext("test?s=");
+
+        // act
+        var result = _binder.Bind<TestCallbackParams>(ctx);
+
+        // assert
+        result.Status.Should().Be(string.Empty);
+    }
 }

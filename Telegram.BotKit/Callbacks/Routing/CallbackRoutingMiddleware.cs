@@ -22,7 +22,10 @@ internal sealed class CallbackRoutingMiddleware(
             throw new RouteNotFoundException(context.Key);
         }
 
-        context.MatchedInvoker = (ICallbackHandlerInvoker)serviceProvider.GetRequiredService(invokerType!);
+        var invoker = (ICallbackHandlerInvoker)serviceProvider.GetRequiredService(invokerType!);
+        context.MatchedInvoker = invoker;
+        context.MatchedCallbackMetadata = new CallbackMetadata(invoker.HandlerType, invoker.HandlerInstance);
+
         await next();
     }
 }

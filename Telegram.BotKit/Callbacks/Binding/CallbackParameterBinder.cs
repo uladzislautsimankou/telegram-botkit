@@ -79,8 +79,7 @@ internal sealed class CallbackParameterBinder : ICallbackParameterBinder
 
     private object? ConvertValue(string? input, Type type)
     {
-        if (string.IsNullOrWhiteSpace(input)) return null;
-
+        // delegate empty string and whitespace handling directly to converters
         foreach (var converter in _reversedConverters)
         {
             if (converter.TryConvert(input, type, out var result))

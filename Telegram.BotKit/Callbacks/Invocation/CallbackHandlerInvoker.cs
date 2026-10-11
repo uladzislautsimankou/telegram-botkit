@@ -7,11 +7,17 @@ namespace Telegram.BotKit.Callbacks.Invocation;
 /// <summary>
 /// Standard generic invoker that binds incoming parameters and routes execution to the target callback handler.
 /// </summary>
-internal sealed class CallbackHandlerInvoker<TParams>(
-    ICallbackHandler<TParams> handler,
+internal sealed class CallbackHandlerInvoker<THandler, TParams>(
+    THandler handler,
     ICallbackParameterBinder binder
-    ) : ICallbackHandlerInvoker where TParams : class, new()
+    ) : ICallbackHandlerInvoker
+    where THandler : class, ICallbackHandler<TParams>
+    where TParams : class, new()
 {
+    public Type HandlerType => typeof(THandler);
+
+    public object HandlerInstance => handler;
+
     public async Task InvokeAsync(CallbackContext context, CancellationToken cancellationToken = default)
     {
         var parameters = binder.Bind<TParams>(context);
