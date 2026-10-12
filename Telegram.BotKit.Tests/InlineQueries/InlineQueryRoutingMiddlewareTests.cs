@@ -26,7 +26,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
         var middleware = new InlineQueryRoutingMiddleware([handler], _logger);
         var context = CreateInlineContext("search query");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
@@ -52,7 +52,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
         var middleware = new InlineQueryRoutingMiddleware([handler], _logger);
         var context = CreateInlineContext("search query");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
@@ -88,7 +88,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
         var middleware = new InlineQueryRoutingMiddleware([handler1, handler2], _logger);
         var context = CreateInlineContext("search query");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
@@ -102,9 +102,9 @@ public sealed class InlineQueryRoutingMiddlewareTests
         context.NextOffset.Should().Be("offset2");
     }
 
-    // verifies that when a handler throws an exception, it is caught and stored as a HandlerFailedException in the context
+    // verifies that when a handler throws an exception, it is logged and stored as a HandlerFailedException in context
     [Fact]
-    public async Task InvokeAsync_WhenHandlerThrows_ShouldCaptureExceptionAndCallNext()
+    public async Task InvokeAsync_WhenHandlerThrows_ShouldCaptureExceptionLogAndCallNext()
     {
         // arrange
         var handler = Substitute.For<IInlineQueryHandler>();
@@ -116,7 +116,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
         var middleware = new InlineQueryRoutingMiddleware([handler], _logger);
         var context = CreateInlineContext("search query");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
@@ -128,6 +128,54 @@ public sealed class InlineQueryRoutingMiddlewareTests
             .Which.Should().BeOfType<HandlerFailedException>()
             .Which.InnerException.Should().BeOfType<InvalidOperationException>()
             .Which.Message.Should().Be("DB error");
+
+        _logger.Received(1).Log(
+            LogLevel.Error,
+            Arg.Any<EventId>(),
+            Arg.Any<object>(),
+            Arg.Is<Exception>(ex => ex is InvalidOperationException && ex.Message == "DB error"),
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    // verifies that failure of one handler among multiple does not abort other handler execution
+    [Fact]
+    public async Task InvokeAsync_WhenOneHandlerThrowsAmongMultiple_ShouldCaptureExceptionAndAggregateRemainingResults()
+    {
+        // arrange
+        var successResult = Substitute.For<InlineQueryResult>();
+        var successBatch = new InlineQueryBatch([successResult]);
+
+        var failingHandler = Substitute.For<IInlineQueryHandler>();
+        failingHandler.CanHandle(Arg.Any<InlineQuery>()).Returns(true);
+        failingHandler
+            .HandleAsync(Arg.Any<InlineQueryContext>(), TestContext.Current.CancellationToken)
+            .Returns(Task.FromException<InlineQueryBatch>(new InvalidOperationException("API failure")));
+
+        var successHandler = Substitute.For<IInlineQueryHandler>();
+        successHandler.CanHandle(Arg.Any<InlineQuery>()).Returns(true);
+        successHandler
+            .HandleAsync(Arg.Any<InlineQueryContext>(), TestContext.Current.CancellationToken)
+            .Returns(Task.FromResult(successBatch));
+
+        var middleware = new InlineQueryRoutingMiddleware([failingHandler, successHandler], _logger);
+        var context = CreateInlineContext("search query");
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeTrue();
+        context.Results.Should().ContainSingle().Which.Should().BeSameAs(successResult);
+        context.Exceptions.Should().ContainSingle().Which.InnerException.Should().BeOfType<InvalidOperationException>();
+
+        _logger.Received(1).Log(
+            LogLevel.Error,
+            Arg.Any<EventId>(),
+            Arg.Any<object>(),
+            Arg.Is<Exception>(ex => ex is InvalidOperationException && ex.Message == "API failure"),
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     // verifies that when a single handler returns a button, it is successfully populated in the context
@@ -146,7 +194,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
         var middleware = new InlineQueryRoutingMiddleware([handler], _logger);
         var context = CreateInlineContext("search query");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
@@ -180,7 +228,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
         var middleware = new InlineQueryRoutingMiddleware([handler1, handler2], _logger);
         var context = CreateInlineContext("search query");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
@@ -197,7 +245,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
             Arg.Any<Func<object, Exception?, string>>());
     }
 
-    private InlineQueryContext CreateInlineContext(string queryText)
+    private static InlineQueryContext CreateInlineContext(string queryText)
     {
         var query = new InlineQuery
         {

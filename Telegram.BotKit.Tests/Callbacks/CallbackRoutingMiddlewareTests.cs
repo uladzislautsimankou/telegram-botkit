@@ -13,112 +13,119 @@ public sealed class CallbackRoutingMiddlewareTests
 {
     private sealed class DummyHandler;
 
-    private IServiceProvider CreateMockServiceProvider(Dictionary<Type, object> services)
-    {
-        var provider = Substitute.For<IServiceProvider>();
-
-        foreach (var (type, instance) in services)
-        {
-            provider.GetService(type).Returns(instance);
-        }
-
-        return provider;
-    }
-
-    private (ICallbackHandlerInvoker Invoker, DummyHandler Handler) CreateMockInvoker()
+    private static (CallbackRegistration Registration, DummyHandler Handler) CreateMockRegistration()
     {
         var handler = new DummyHandler();
-        var invoker = Substitute.For<ICallbackHandlerInvoker>();
-        invoker.HandlerType.Returns(typeof(DummyHandler));
-        invoker.HandlerInstance.Returns(handler);
+        var registration = new CallbackRegistration(
+            HandlerType: typeof(DummyHandler),
+            Factory: _ => handler,
+            Invoker: static (_, _, _, _) => Task.CompletedTask
+        );
 
-        return (invoker, handler);
+        return (registration, handler);
     }
 
-    // verifies that a callback with an exact key match assigns the matched invoker and metadata to the context and continues the pipeline
+    // verifies that an exact callback key match assigns the matched registration and metadata to the context and invokes next
     [Fact]
-    public async Task InvokeAsync_WhenCallbackKeyMatchesExactly_ShouldAssignInvokerAndMetadataAndCallNext()
+    public async Task InvokeAsync_WhenCallbackKeyMatchesExactly_ShouldAssignRegistrationAndMetadataAndCallNext()
     {
         // arrange
-        var (invoker, handler) = CreateMockInvoker();
+        var (registration, handler) = CreateMockRegistration();
         var registry = new CallbackHandlerRegistry();
-        registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
+        registry.Register("menu:main", registration);
+        registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new()
-        {
-            [typeof(ICallbackHandlerInvoker)] = invoker
-        });
-
+        var serviceProvider = Substitute.For<IServiceProvider>();
         var middleware = new CallbackRoutingMiddleware(registry, serviceProvider);
         var context = CreateCallbackContext("menu:main");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeTrue();
-        context.MatchedInvoker.Should().BeSameAs(invoker);
+        context.MatchedRegistration.Should().BeSameAs(registration);
         context.MatchedCallbackMetadata.Should().NotBeNull();
         context.MatchedCallbackMetadata!.HandlerType.Should().Be(typeof(DummyHandler));
         context.MatchedCallbackMetadata.HandlerInstance.Should().BeSameAs(handler);
     }
 
-    // verifies that a callback key containing parameters is successfully resolved and metadata is populated
+    // verifies that callback keys match case insensitively
     [Fact]
-    public async Task InvokeAsync_WhenCallbackKeyMatchesWithParameters_ShouldAssignInvokerAndMetadataAndCallNext()
+    public async Task InvokeAsync_WhenCallbackKeyMatchesCaseInsensitively_ShouldAssignRegistrationAndMetadataAndCallNext()
     {
         // arrange
-        var (invoker, handler) = CreateMockInvoker();
+        var (registration, handler) = CreateMockRegistration();
         var registry = new CallbackHandlerRegistry();
-        registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
+        registry.Register("menu:main", registration);
+        registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new()
-        {
-            [typeof(ICallbackHandlerInvoker)] = invoker
-        });
-
+        var serviceProvider = Substitute.For<IServiceProvider>();
         var middleware = new CallbackRoutingMiddleware(registry, serviceProvider);
-        var context = CreateCallbackContext("menu:main?id=123");
+        var context = CreateCallbackContext("MENU:MAIN");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeTrue();
-        context.MatchedInvoker.Should().BeSameAs(invoker);
+        context.MatchedRegistration.Should().BeSameAs(registration);
         context.MatchedCallbackMetadata.Should().NotBeNull();
         context.MatchedCallbackMetadata!.HandlerInstance.Should().BeSameAs(handler);
     }
 
-    // verifies that an unknown callback trigger throws a route not found exception
+    // verifies that a callback key containing query parameters is resolved properly and metadata is populated
+    [Fact]
+    public async Task InvokeAsync_WhenCallbackKeyMatchesWithParameters_ShouldAssignRegistrationAndMetadataAndCallNext()
+    {
+        // arrange
+        var (registration, handler) = CreateMockRegistration();
+        var registry = new CallbackHandlerRegistry();
+        registry.Register("menu:main", registration);
+        registry.Build();
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CallbackRoutingMiddleware(registry, serviceProvider);
+        var context = CreateCallbackContext("menu:main?id=123");
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeTrue();
+        context.MatchedRegistration.Should().BeSameAs(registration);
+        context.MatchedCallbackMetadata.Should().NotBeNull();
+        context.MatchedCallbackMetadata!.HandlerInstance.Should().BeSameAs(handler);
+    }
+
+    // verifies that an unregistered callback key throws a route not found exception
     [Fact]
     public async Task InvokeAsync_WhenCallbackKeyIsUnknown_ShouldThrowRouteNotFoundException()
     {
         // arrange
-        var (invoker, _) = CreateMockInvoker();
+        var (registration, _) = CreateMockRegistration();
         var registry = new CallbackHandlerRegistry();
-        registry.Register("menu:main", typeof(ICallbackHandlerInvoker));
+        registry.Register("menu:main", registration);
+        registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new()
-        {
-            [typeof(ICallbackHandlerInvoker)] = invoker
-        });
-
+        var serviceProvider = Substitute.For<IServiceProvider>();
         var middleware = new CallbackRoutingMiddleware(registry, serviceProvider);
         var context = CreateCallbackContext("unknown:action");
 
         // act
-        var act = () => middleware.InvokeAsync(context, () => Task.CompletedTask, TestContext.Current.CancellationToken);
+        var act = async () => await middleware.InvokeAsync(context, static () => ValueTask.CompletedTask, TestContext.Current.CancellationToken);
 
         // assert
         await act.Should().ThrowAsync<RouteNotFoundException>();
     }
 
-    private CallbackContext CreateCallbackContext(string data)
+    private static CallbackContext CreateCallbackContext(string data)
     {
         var query = new CallbackQuery
         {

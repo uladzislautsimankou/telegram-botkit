@@ -14,19 +14,21 @@ public sealed class MessagePipelineRegistrationTests
 
         public bool CanHandle(MessageContext context) => true;
 
-        public Task HandleAsync(MessageContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class GlobalMessageHandler : IMessageHandler
     {
         public bool CanHandle(MessageContext context) => true;
 
-        public Task HandleAsync(MessageContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     // verifies that message handlers are registered in the registry grouped by their state requirements
     [Fact]
-    public void AddHandler_WhenHandlersAreRegistered_ShouldCategorizeInRegistryCorrectly()
+    public async Task AddHandler_WhenHandlersAreRegistered_ShouldCategorizeInRegistryCorrectly()
     {
         // arrange
         var services = new ServiceCollection();
@@ -36,14 +38,56 @@ public sealed class MessagePipelineRegistrationTests
         builder.AddHandler<StateBoundMessageHandler>();
         builder.AddHandler<GlobalMessageHandler>();
 
-        var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         var registry = provider.GetRequiredService<MessageHandlerRegistry>();
+        registry.Build();
 
         // assert
-        registry.GetHandlerTypesForState("registration").Should().ContainSingle().Which.Should().Be(typeof(StateBoundMessageHandler));
-        registry.GetGlobalHandlerTypes().Should().ContainSingle().Which.Should().Be(typeof(GlobalMessageHandler));
+        registry.GetHandlerTypesForState("registration").ToArray().Should().ContainSingle().Which.Should().Be(typeof(StateBoundMessageHandler));
+        registry.GetGlobalHandlerTypes().ToArray().Should().ContainSingle().Which.Should().Be(typeof(GlobalMessageHandler));
 
         provider.GetRequiredService<StateBoundMessageHandler>().Should().NotBeNull();
         provider.GetRequiredService<GlobalMessageHandler>().Should().NotBeNull();
+    }
+
+    // verifies that duplicate message handler registrations are ignored by the registry
+    [Fact]
+    public async Task AddHandler_WhenSameHandlerAddedTwice_ShouldNotDuplicateInRegistry()
+    {
+        // arrange
+        var services = new ServiceCollection();
+        var builder = new MessagePipelineBuilder(services);
+
+        // act
+        builder.AddHandler<GlobalMessageHandler>();
+        builder.AddHandler<GlobalMessageHandler>();
+
+        await using var provider = services.BuildServiceProvider();
+        var registry = provider.GetRequiredService<MessageHandlerRegistry>();
+        registry.Build();
+
+        // assert
+        registry.GetGlobalHandlerTypes().ToArray().Should().ContainSingle().Which.Should().Be(typeof(GlobalMessageHandler));
+    }
+
+    // verifies that duplicate message handler registrations are ignored by the registry and service collection
+    [Fact]
+    public async Task AddHandler_WhenSameHandlerAddedTwice_ShouldNotDuplicateInRegistryOrDi()
+    {
+        // arrange
+        var services = new ServiceCollection();
+        var builder = new MessagePipelineBuilder(services);
+
+        // act
+        builder.AddHandler<GlobalMessageHandler>();
+        builder.AddHandler<GlobalMessageHandler>();
+
+        await using var provider = services.BuildServiceProvider();
+        var registry = provider.GetRequiredService<MessageHandlerRegistry>();
+        registry.Build();
+
+        // assert
+        registry.GetGlobalHandlerTypes().ToArray().Should().ContainSingle().Which.Should().Be(typeof(GlobalMessageHandler));
+        provider.GetServices<GlobalMessageHandler>().Should().ContainSingle();
     }
 }

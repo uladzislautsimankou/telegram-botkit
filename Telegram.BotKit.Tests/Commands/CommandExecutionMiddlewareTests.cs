@@ -1,7 +1,6 @@
 ﻿using FluentAssertions;
 using NSubstitute;
 using Telegram.Bot.Types;
-using Telegram.BotKit.Callbacks.Invocation;
 using Telegram.BotKit.Commands.Invocation;
 using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Commands.Routing;
@@ -11,48 +10,124 @@ namespace Telegram.BotKit.Tests.Commands;
 
 public sealed class CommandExecutionMiddlewareTests
 {
-    // verifies that the execution middleware invokes the matched command invoker when it is present in the context
+    private sealed class DummyHandler;
+
+    // verifies that execution middleware executes the matched command invoker and does not call next
     [Fact]
-    public async Task InvokeAsync_WhenMatchedInvokerIsNotNull_ShouldExecuteInvoker()
+    public async Task InvokeAsync_WhenMatchedRegistrationIsNotNull_ShouldExecuteInvokerAndNotCallNext()
     {
         // arrange
-        var invoker = Substitute.For<ICallbackHandlerInvoker>(); // Wait, let's use ICommandHandlerInvoker
-        var commandInvoker = Substitute.For<ICommandHandlerInvoker>();
-        var middleware = new CommandExecutionMiddleware();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandExecutionMiddleware(serviceProvider);
+        var handler = new DummyHandler();
 
+        var invokerCalled = false;
+        object? capturedInstance = null;
+        CommandContext? capturedContext = null;
+        var capturedToken = CancellationToken.None;
+
+        CommandInvokerDelegate invoker = (instance, ctx, _, ct) =>
+        {
+            invokerCalled = true;
+            capturedInstance = instance;
+            capturedContext = ctx;
+            capturedToken = ct;
+            return Task.CompletedTask;
+        };
+
+        var registration = new CommandRegistration(typeof(DummyHandler), _ => handler, invoker);
         var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
         var context = new CommandContext(message)
         {
-            MatchedInvoker = commandInvoker
+            MatchedRegistration = registration,
+            MatchedCommandMetadata = new CommandMetadata(typeof(DummyHandler), handler)
         };
 
-        NextDelegate next = () => Task.CompletedTask;
+        var nextCalled = false;
+        NextDelegate next = () =>
+        {
+            nextCalled = true;
+            return ValueTask.CompletedTask;
+        };
 
         // act
         await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // assert
-        await commandInvoker.Received(1).InvokeAsync(context, TestContext.Current.CancellationToken);
+        invokerCalled.Should().BeTrue();
+        capturedInstance.Should().BeSameAs(handler);
+        capturedContext.Should().BeSameAs(context);
+        capturedToken.Should().Be(TestContext.Current.CancellationToken);
+        nextCalled.Should().BeFalse();
     }
 
-    // verifies that the execution middleware cleanly completes without attempting invocation when matched invoker is null
+    // verifies that execution middleware cleanly completes without calling next when matched registration is null
     [Fact]
-    public async Task InvokeAsync_WhenMatchedInvokerIsNull_ShouldDoNothing()
+    public async Task InvokeAsync_WhenMatchedRegistrationIsNull_ShouldCompleteWithoutCallingNext()
     {
         // arrange
-        var middleware = new CommandExecutionMiddleware();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandExecutionMiddleware(serviceProvider);
         var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
         var context = new CommandContext(message)
         {
-            MatchedInvoker = null
+            MatchedRegistration = null,
+            MatchedCommandMetadata = null
         };
 
-        NextDelegate next = () => Task.CompletedTask;
+        var nextCalled = false;
+        NextDelegate next = () =>
+        {
+            nextCalled = true;
+            return ValueTask.CompletedTask;
+        };
 
         // act
-        var act = () => middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
+        var result = middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
+        await result;
 
         // assert
-        await act.Should().NotThrowAsync();
+        result.IsCompletedSuccessfully.Should().BeTrue();
+        nextCalled.Should().BeFalse();
+    }
+
+    // verifies that execution middleware completes safely when registration is present but metadata is missing
+    [Fact]
+    public async Task InvokeAsync_WhenMetadataIsNull_ShouldCompleteWithoutInvokingOrCallingNext()
+    {
+        // arrange
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandExecutionMiddleware(serviceProvider);
+
+        var invokerCalled = false;
+        CommandInvokerDelegate invoker = (_, _, _, _) =>
+        {
+            invokerCalled = true;
+            return Task.CompletedTask;
+        };
+
+        var registration = new CommandRegistration(typeof(DummyHandler), _ => new DummyHandler(), invoker);
+        var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
+        var context = new CommandContext(message)
+        {
+            MatchedRegistration = registration,
+            MatchedCommandMetadata = null
+        };
+
+        var nextCalled = false;
+        NextDelegate next = () =>
+        {
+            nextCalled = true;
+            return ValueTask.CompletedTask;
+        };
+
+        // act
+        var result = middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
+        await result;
+
+        // assert
+        result.IsCompletedSuccessfully.Should().BeTrue();
+        invokerCalled.Should().BeFalse();
+        nextCalled.Should().BeFalse();
     }
 }

@@ -4,6 +4,12 @@ namespace Telegram.BotKit.Tests.Shared.Converters;
 
 public sealed partial class ValueConverterTests
 {
+    private enum TestEnum
+    {
+        First = 1,
+        Second = 2
+    }
+
     [Flags]
     private enum TestFlagsEnum
     {
@@ -67,8 +73,8 @@ public sealed partial class ValueConverterTests
     [InlineData("Read", TestFlagsEnum.Read)]
     [InlineData("Read, Write", TestFlagsEnum.Read | TestFlagsEnum.Write)]
     [InlineData("read,execute", TestFlagsEnum.Read | TestFlagsEnum.Execute)]
-    [InlineData("3", TestFlagsEnum.Read | TestFlagsEnum.Write)] // 1 | 2 = 3
-    [InlineData("7", TestFlagsEnum.Read | TestFlagsEnum.Write | TestFlagsEnum.Execute)] // 1 | 2 | 4 = 7
+    [InlineData("3", TestFlagsEnum.Read | TestFlagsEnum.Write)]
+    [InlineData("7", TestFlagsEnum.Read | TestFlagsEnum.Write | TestFlagsEnum.Execute)]
     public void TryConvert_WhenFlagsEnumIsValid_ShouldConvertSuccessfully(string input, object expected)
     {
         // arrange
@@ -84,8 +90,8 @@ public sealed partial class ValueConverterTests
 
     // verifies that a flag combination containing undefined bits throws a format exception
     [Theory]
-    [InlineData("8")]   // bit 8 is not declared
-    [InlineData("15")]  // 1+2+4 + extra bit 8
+    [InlineData("8")]
+    [InlineData("15")]
     [InlineData("Read, UnknownFlag")]
     public void Convert_WhenFlagsEnumHasUndefinedBits_ShouldThrowFormatException(string input)
     {

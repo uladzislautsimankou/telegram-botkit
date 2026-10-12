@@ -18,7 +18,7 @@ public sealed class InlineQueryPipelineRegistrationTests
 
     // verifies that inline query handlers are registered under their interface in the service collection
     [Fact]
-    public void AddHandler_WhenCalled_ShouldRegisterHandlerUnderInterface()
+    public async Task AddHandler_WhenCalled_ShouldRegisterHandlerUnderInterface()
     {
         // arrange
         var services = new ServiceCollection();
@@ -27,11 +27,30 @@ public sealed class InlineQueryPipelineRegistrationTests
         // act
         builder.AddHandler<DummyInlineQueryHandler>();
 
-        var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         var handler = provider.GetService<IInlineQueryHandler>();
 
         // assert
         handler.Should().NotBeNull();
         handler.Should().BeOfType<DummyInlineQueryHandler>();
+    }
+
+    // verifies that repeated registration of the same handler does not duplicate entries under the interface
+    [Fact]
+    public async Task AddHandler_WhenHandlerRegisteredMultipleTimes_ShouldNotDuplicateUnderInterface()
+    {
+        // arrange
+        var services = new ServiceCollection();
+        var builder = new InlineQueryPipelineBuilder(services);
+
+        // act
+        builder.AddHandler<DummyInlineQueryHandler>();
+        builder.AddHandler<DummyInlineQueryHandler>();
+
+        await using var provider = services.BuildServiceProvider();
+        var handlers = provider.GetServices<IInlineQueryHandler>();
+
+        // assert
+        handlers.Should().ContainSingle().Which.Should().BeOfType<DummyInlineQueryHandler>();
     }
 }

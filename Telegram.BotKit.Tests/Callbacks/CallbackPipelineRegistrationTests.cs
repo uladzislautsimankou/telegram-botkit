@@ -1,11 +1,11 @@
 ﻿using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
-using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Callbacks.Abstractions;
 using Telegram.BotKit.Callbacks.Binding;
-using Telegram.BotKit.Callbacks.Invocation;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Callbacks.Routing;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.Callbacks;
 
@@ -27,9 +27,9 @@ public sealed class CallbackPipelineRegistrationTests
             Task.CompletedTask;
     }
 
-    // verifies that callback handlers sharing identical parameter models register distinct invoker types without collisions
+    // verifies that callback handlers sharing identical parameter models register distinct registrations and factories without collisions
     [Fact]
-    public void AddHandler_WhenMultipleHandlersShareSameParameters_ShouldRegisterDistinctInvokers()
+    public async Task AddHandler_WhenMultipleHandlersShareSameParameters_ShouldRegisterDistinctRegistrations()
     {
         // arrange
         var services = new ServiceCollection();
@@ -41,20 +41,37 @@ public sealed class CallbackPipelineRegistrationTests
         builder.AddHandler<CancelCallbackHandler>();
         builder.AddHandler<ConfirmCallbackHandler>();
 
-        var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         var registry = provider.GetRequiredService<CallbackHandlerRegistry>();
+        registry.Build();
 
         // assert
-        registry.TryGetInvokerType("btn:cancel", out var cancelInvokerType).Should().BeTrue();
-        registry.TryGetInvokerType("btn:confirm", out var confirmInvokerType).Should().BeTrue();
+        registry.TryGetRegistration("btn:cancel", out var cancelRegistration).Should().BeTrue();
+        registry.TryGetRegistration("btn:confirm", out var confirmRegistration).Should().BeTrue();
 
-        cancelInvokerType.Should().Be(typeof(CallbackHandlerInvoker<CancelCallbackHandler, EmptyCallbackParams>));
-        confirmInvokerType.Should().Be(typeof(CallbackHandlerInvoker<ConfirmCallbackHandler, EmptyCallbackParams>));
+        cancelRegistration!.HandlerType.Should().Be(typeof(CancelCallbackHandler));
+        confirmRegistration!.HandlerType.Should().Be(typeof(ConfirmCallbackHandler));
 
-        var cancelInvoker = (ICallbackHandlerInvoker)provider.GetRequiredService(cancelInvokerType!);
-        var confirmInvoker = (ICallbackHandlerInvoker)provider.GetRequiredService(confirmInvokerType!);
+        var cancelInstance = cancelRegistration.Factory(provider);
+        var confirmInstance = confirmRegistration.Factory(provider);
 
-        cancelInvoker.HandlerType.Should().Be(typeof(CancelCallbackHandler));
-        confirmInvoker.HandlerType.Should().Be(typeof(ConfirmCallbackHandler));
+        cancelInstance.Should().BeOfType<CancelCallbackHandler>();
+        confirmInstance.Should().BeOfType<ConfirmCallbackHandler>();
+    }
+
+    // verifies that multiple calls to userouting do not introduce duplicate steps
+    [Fact]
+    public void UseRouting_WhenCalledMultipleTimes_ShouldRegisterOnlySingleStep()
+    {
+        // arrange
+        var services = new ServiceCollection();
+        var builder = new CallbackPipelineBuilder(services);
+
+        // act
+        builder.UseRouting();
+        builder.UseRouting();
+
+        // assert
+        builder.Steps.Should().ContainSingle(step => step.Type == PipelineStepType.Routing);
     }
 }

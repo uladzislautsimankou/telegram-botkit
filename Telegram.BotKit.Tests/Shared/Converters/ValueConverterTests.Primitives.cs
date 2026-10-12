@@ -11,12 +11,31 @@ public sealed partial class ValueConverterTests
     [InlineData("False", typeof(bool), false)]
     public void TryConvert_WhenPrimitiveTypeIsValid_ShouldConvertSuccessfully(string input, Type type, object expected)
     {
-        // arrange & act
+        // act
         var success = _converter.TryConvert(input, type, out var result);
 
         // assert
         success.Should().BeTrue();
         result.Should().Be(expected);
+    }
+
+    // verifies that valid guid strings are parsed successfully
+    [Theory]
+    [InlineData("9f826315-9c59-4f76-8800-4b89823f6608")]
+    [InlineData("9F826315-9C59-4F76-8800-4B89823F6608")]
+    [InlineData("9f8263159c594f7688004b89823f6608")]
+    public void TryConvert_WhenGuidIsValid_ShouldConvertSuccessfully(string input)
+    {
+        // arrange
+        var targetType = typeof(Guid);
+        var expectedGuid = Guid.Parse(input);
+
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().Be(expectedGuid);
     }
 
     // verifies that fractional double strings with dot or comma decimal marks are parsed correctly
@@ -99,6 +118,22 @@ public sealed partial class ValueConverterTests
         result.Should().BeNull();
     }
 
+    // verifies that whitespace-only input returns success and null for nullable value types
+    [Fact]
+    public void TryConvert_WhenInputIsWhitespaceAndTypeIsNullableValueType_ShouldReturnTrueAndNull()
+    {
+        // arrange
+        var input = "   ";
+        var targetType = typeof(int?);
+
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeTrue();
+        result.Should().BeNull();
+    }
+
     // verifies that empty input remains an empty string when target type is string
     [Fact]
     public void TryConvert_WhenInputIsEmptyAndTypeIsString_ShouldReturnEmptyString()
@@ -121,6 +156,21 @@ public sealed partial class ValueConverterTests
     {
         // arrange
         var input = "";
+        var targetType = typeof(int);
+
+        // act
+        var success = _converter.TryConvert(input, targetType, out var result);
+
+        // assert
+        success.Should().BeFalse();
+    }
+
+    // verifies that whitespace-only input fails when attempting to bind to non-nullable value types
+    [Fact]
+    public void TryConvert_WhenInputIsWhitespaceAndTypeIsNotNullable_ShouldReturnFalse()
+    {
+        // arrange
+        var input = "   ";
         var targetType = typeof(int);
 
         // act

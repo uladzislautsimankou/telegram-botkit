@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -9,14 +8,12 @@ using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Commands.Routing;
 using Telegram.BotKit.Hosting;
 using Telegram.BotKit.Shared;
-using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Tests.Commands;
 
 public sealed class CommandRoutingMiddlewareTests
 {
     private readonly IBotInfo _botInfo;
-    private readonly IOptionsMonitor<TelegramBotOptions> _optionsMonitor;
 
     private sealed class DummyParams1;
     private sealed class DummyParams2;
@@ -39,201 +36,207 @@ public sealed class CommandRoutingMiddlewareTests
     {
         _botInfo = Substitute.For<IBotInfo>();
         _botInfo.Username.Returns("TestBot");
-
-        _optionsMonitor = Substitute.For<IOptionsMonitor<TelegramBotOptions>>();
-        _optionsMonitor.CurrentValue.Returns(new TelegramBotOptions());
     }
 
-    private IServiceProvider CreateMockServiceProvider(Dictionary<Type, object> services)
-    {
-        var provider = Substitute.For<IServiceProvider>();
-
-        foreach (var (type, instance) in services)
-        {
-            provider.GetService(type).Returns(instance);
-        }
-
-        return provider;
-    }
-
-    private (Type InvokerType, ICommandHandlerInvoker Invoker, object Handler) CreateMockInvoker<THandler, TParams>()
+    private static (CommandRegistration Registration, THandler Handler) CreateMockRegistration<THandler, TParams>()
         where THandler : class, ICommandHandler<TParams>, new()
         where TParams : class, new()
     {
         var handler = new THandler();
-        var invoker = Substitute.For<ICommandHandlerInvoker>();
-        invoker.HandlerType.Returns(typeof(THandler));
-        invoker.HandlerInstance.Returns(handler);
+        var registration = new CommandRegistration(
+            HandlerType: typeof(THandler),
+            Factory: _ => handler,
+            Invoker: static (_, _, _, _) => Task.CompletedTask
+        );
 
-        return (typeof(CommandHandlerInvoker<THandler, TParams>), invoker, handler);
+        return (registration, handler);
     }
 
-    // verifies that the router populates matched command metadata and invokes the next pipeline step when a matching handler is registered
+    // verifies that the router populates matched metadata and invokes next when handler is registered
     [Fact]
     public async Task InvokeAsync_WhenCommandIsFoundInHandlerMap_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var (registration, handler) = CreateMockRegistration<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
         registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
 
         var context = CreateCommandContext("bday_set", ChatType.Private);
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeTrue();
-        context.MatchedCommandMetadata.Should().NotBeNull();
-        context.MatchedCommandMetadata!.HandlerType.Should().Be(typeof(DummyHandler1));
-        context.MatchedCommandMetadata.HandlerInstance.Should().BeSameAs(handler);
-    }
-
-    // verifies that aliases map successfully to the primary handler metadata and invoke the next delegate
-    [Fact]
-    public async Task InvokeAsync_WhenCommandMatchesAlias_ShouldSetMetadataAndCallNext()
-    {
-        // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
-        var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
-        registry.Build();
-
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
-
-        var context = CreateCommandContext("bday_add", ChatType.Private);
-        var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
-
-        // act
-        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
-
-        // assert
-        called.Should().BeTrue();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Success);
+        context.MatchedRegistration.Should().BeSameAs(registration);
         context.MatchedCommandMetadata.Should().NotBeNull();
         context.MatchedCommandMetadata!.HandlerType.Should().Be(typeof(DummyHandler1));
         context.MatchedCommandMetadata.HandlerInstance.Should().BeSameAs(handler);
     }
 
     // verifies that multiple registered aliases route to the same command handler correctly
-    [Fact]
-    public async Task InvokeAsync_WhenMultipleCommandAliasesAreProvided_ShouldSetMetadataAndCallNext()
+    [Theory]
+    [InlineData("bday_set")]
+    [InlineData("bday_add")]
+    [InlineData("bday_create")]
+    public async Task InvokeAsync_WhenCommandMatchesAlias_ShouldSetMetadataAndCallNext(string commandOrAlias)
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var (registration, handler) = CreateMockRegistration<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
         registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
 
-        // act & assert
-        foreach (var alias in new[] { "bday_set", "bday_create" })
-        {
-            var context = CreateCommandContext(alias, ChatType.Private);
-            var called = false;
-            await middleware.InvokeAsync(context, () => { called = true; return Task.CompletedTask; }, TestContext.Current.CancellationToken);
-
-            called.Should().BeTrue($"Alias '{alias}' should call next");
-            context.MatchedCommandMetadata.Should().NotBeNull();
-            context.MatchedCommandMetadata!.HandlerInstance.Should().BeSameAs(handler);
-        }
-    }
-
-    // verifies that entering a misspelled command trigger throws a suggestion exception populated with potential matching commands
-    [Fact]
-    public async Task InvokeAsync_WhenSimilarCommandExists_ShouldThrowCommandSuggestionsException()
-    {
-        // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
-        var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
-        registry.Build();
-
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
-        var context = CreateCommandContext("bady_set", ChatType.Private);
-
-        // act
-        var act = () => middleware.InvokeAsync(context, () => Task.CompletedTask, TestContext.Current.CancellationToken);
-
-        // assert
-        var exceptionAssertion = await act.Should().ThrowAsync<CommandSuggestionsException>();
-        exceptionAssertion.Which.Suggestions.Should().Contain("bday_set");
-    }
-
-    // verifies that misspelled commands inside group chats also throw suggestion exceptions
-    [Fact]
-    public async Task InvokeAsync_WhenSimilarCommandExistsInGroupChat_ShouldThrowCommandSuggestionsException()
-    {
-        // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
-        var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
-        registry.Build();
-
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
-        var context = CreateCommandContext("bady_set", ChatType.Group);
-
-        // act
-        var act = () => middleware.InvokeAsync(context, () => Task.CompletedTask, TestContext.Current.CancellationToken);
-
-        // assert
-        var exceptionAssertion = await act.Should().ThrowAsync<CommandSuggestionsException>();
-        exceptionAssertion.Which.Suggestions.Should().Contain("bday_set");
-    }
-
-    // verifies that an unknown command trigger in a private chat context immediately throws a route not found exception
-    [Fact]
-    public async Task InvokeAsync_WhenCommandIsUnknownInPrivateChat_ShouldThrowRouteNotFoundException()
-    {
-        // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
-        var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
-        registry.Build();
-
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
-        var context = CreateCommandContext("totally_unknown", ChatType.Private);
-
-        // act
-        var act = () => middleware.InvokeAsync(context, () => Task.CompletedTask, TestContext.Current.CancellationToken);
-
-        // assert
-        await act.Should().ThrowAsync<RouteNotFoundException>();
-    }
-
-    // verifies that unrecognized commands inside non-private group chats are ignored without throwing exceptions or calling next
-    [Fact]
-    public async Task InvokeAsync_WhenCommandIsUnknownInGroupChat_ShouldIgnoreAndShortCircuit()
-    {
-        // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
-        var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
-        registry.Build();
-
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
-        var context = CreateCommandContext("totally_unknown", ChatType.Group);
+        var context = CreateCommandContext(commandOrAlias, ChatType.Private);
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeTrue();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Success);
+        context.MatchedRegistration.Should().BeSameAs(registration);
+        context.MatchedCommandMetadata.Should().NotBeNull();
+        context.MatchedCommandMetadata!.HandlerType.Should().Be(typeof(DummyHandler1));
+        context.MatchedCommandMetadata.HandlerInstance.Should().BeSameAs(handler);
+    }
+
+    // verifies that commands targeting our bot explicitly are accepted and routed
+    [Theory]
+    [InlineData("TestBot")]
+    [InlineData("testbot")]
+    public async Task InvokeAsync_WhenCommandTargetsOurBotUsername_ShouldSetSuccessAndCallNext(string botUsernameMention)
+    {
+        // arrange
+        var (registration, handler) = CreateMockRegistration<DummyHandler1, DummyParams1>();
+        var registry = new CommandHandlerRegistry();
+        registry.Register("bday_set", ["bday_add"], registration);
+        registry.Build();
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
+        var context = CreateCommandContext("bday_set", ChatType.Group, targetBotUsername: botUsernameMention);
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeTrue();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Success);
+        context.MatchedCommandMetadata.Should().NotBeNull();
+        context.MatchedCommandMetadata!.HandlerInstance.Should().BeSameAs(handler);
+    }
+
+    // verifies that entering a misspelled command sets suggestions route result and short-circuits
+    [Fact]
+    public async Task InvokeAsync_WhenSimilarCommandExists_ShouldSetSuggestionsResultAndShortCircuit()
+    {
+        // arrange
+        var (registration, _) = CreateMockRegistration<DummyHandler1, DummyParams1>();
+        var registry = new CommandHandlerRegistry();
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
+        registry.Build();
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
+        var context = CreateCommandContext("bady_set", ChatType.Private);
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeFalse();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Suggestions);
+        context.RouteResult.Suggestions.Should().Contain("bday_set");
+    }
+
+    // verifies that misspelled commands inside group chats set suggestions route result and short-circuits
+    [Fact]
+    public async Task InvokeAsync_WhenSimilarCommandExistsInGroupChat_ShouldSetSuggestionsResultAndShortCircuit()
+    {
+        // arrange
+        var (registration, _) = CreateMockRegistration<DummyHandler1, DummyParams1>();
+        var registry = new CommandHandlerRegistry();
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
+        registry.Build();
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
+        var context = CreateCommandContext("bady_set", ChatType.Group);
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeFalse();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Suggestions);
+        context.RouteResult.Suggestions.Should().Contain("bday_set");
+    }
+
+    // verifies that an unknown command trigger in a private chat sets not found route result and short-circuits
+    [Fact]
+    public async Task InvokeAsync_WhenCommandIsUnknownInPrivateChat_ShouldSetNotFoundResultAndShortCircuit()
+    {
+        // arrange
+        var (registration, _) = CreateMockRegistration<DummyHandler1, DummyParams1>();
+        var registry = new CommandHandlerRegistry();
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
+        registry.Build();
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
+        var context = CreateCommandContext("totally_unknown", ChatType.Private);
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeFalse();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.NotFound);
+    }
+
+    // verifies that unrecognized commands inside non-private group chats are ignored without calling next
+    [Fact]
+    public async Task InvokeAsync_WhenCommandIsUnknownInGroupChat_ShouldIgnoreAndShortCircuit()
+    {
+        // arrange
+        var (registration, _) = CreateMockRegistration<DummyHandler1, DummyParams1>();
+        var registry = new CommandHandlerRegistry();
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
+        registry.Build();
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
+        var context = CreateCommandContext("totally_unknown", ChatType.Group);
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
+
+        // assert
+        called.Should().BeFalse();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Ignored);
     }
 
     // verifies that commands with bot mention suffixes targeting other bot usernames are ignored silently
@@ -241,105 +244,106 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenCommandIsTargetedAtDifferentBot_ShouldIgnoreAndShortCircuit()
     {
         // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var (registration, _) = CreateMockRegistration<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
         registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
         var context = CreateCommandContext("bday_add", ChatType.Private, targetBotUsername: "OtherBot");
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeFalse();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Ignored);
     }
 
-    // verifies that context containing a valid virtual route overrides the default command trigger and routes successfully
+    // verifies that context containing a valid virtual route overrides default trigger and routes successfully
     [Fact]
     public async Task InvokeAsync_WhenVirtualRouteMatches_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var (registration, handler) = CreateMockRegistration<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
         registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
         var context = CreateCommandContext("play", ChatType.Private);
         context.VirtualRoute = "bday_set";
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeTrue();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Success);
+        context.MatchedRegistration.Should().BeSameAs(registration);
         context.MatchedCommandMetadata.Should().NotBeNull();
         context.MatchedCommandMetadata!.HandlerInstance.Should().BeSameAs(handler);
     }
 
-    // verifies that a virtual route trigger takes precedence over the original physical command trigger in routing resolution
+    // verifies that a virtual route trigger takes precedence over original physical trigger in routing
     [Fact]
     public async Task InvokeAsync_WhenVirtualRouteIsProvided_ShouldPreferVirtualRouteOverOriginalCommand()
     {
         // arrange
-        var (playInvokerType, playInvoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
-        var (bdayInvokerType, bdayInvoker, bdayHandler) = CreateMockInvoker<DummyHandler2, DummyParams2>();
+        var (playRegistration, _) = CreateMockRegistration<DummyHandler1, DummyParams1>();
+        var (bdayRegistration, bdayHandler) = CreateMockRegistration<DummyHandler2, DummyParams2>();
 
         var registry = new CommandHandlerRegistry();
-        registry.Register("play", [], playInvokerType);
-        registry.Register("bday_set", [], bdayInvokerType);
+        registry.Register("play", [], playRegistration);
+        registry.Register("bday_set", [], bdayRegistration);
         registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new()
-        {
-            [playInvokerType] = playInvoker,
-            [bdayInvokerType] = bdayInvoker
-        });
-
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
         var context = CreateCommandContext("play", ChatType.Private);
         context.VirtualRoute = "bday_set";
         var called = false;
 
         // act
-        await middleware.InvokeAsync(context, () => { called = true; return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+        await middleware.InvokeAsync(context, () => { called = true; return ValueTask.CompletedTask; }, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeTrue();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Success);
+        context.MatchedRegistration.Should().BeSameAs(bdayRegistration);
         context.MatchedCommandMetadata.Should().NotBeNull();
         context.MatchedCommandMetadata!.HandlerInstance.Should().BeSameAs(bdayHandler);
     }
 
-    // verifies that specifying an unregistered virtual route throws a dedicated virtual route not found exception
+    // verifies that specifying an unregistered virtual route sets virtual route not found result and short-circuits
     [Fact]
-    public async Task InvokeAsync_WhenVirtualRouteIsUnregistered_ShouldThrowVirtualRouteNotFoundException()
+    public async Task InvokeAsync_WhenVirtualRouteIsUnregistered_ShouldSetVirtualRouteNotFoundResultAndShortCircuit()
     {
         // arrange
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var (registration, _) = CreateMockRegistration<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
         registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
         var context = CreateCommandContext("play", ChatType.Private);
         context.VirtualRoute = "non_existent_route";
+        var called = false;
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
-        var act = () => middleware.InvokeAsync(context, () => Task.CompletedTask, TestContext.Current.CancellationToken);
+        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
 
         // assert
-        var exceptionAssertion = await act.Should().ThrowAsync<VirtualRouteNotFoundException>();
-        exceptionAssertion.Which.Command.Should().Be("play");
-        exceptionAssertion.Which.VirtualRoute.Should().Be("non_existent_route");
+        called.Should().BeFalse();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.VirtualRouteNotFound);
     }
 
     // verifies that virtual routes are compatible with command aliases during routing resolution
@@ -347,54 +351,29 @@ public sealed class CommandRoutingMiddlewareTests
     public async Task InvokeAsync_WhenVirtualRouteMatchesAlias_ShouldSetMetadataAndCallNext()
     {
         // arrange
-        var (invokerType, invoker, handler) = CreateMockInvoker<DummyHandler1, DummyParams1>();
+        var (registration, handler) = CreateMockRegistration<DummyHandler1, DummyParams1>();
         var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
+        registry.Register("bday_set", ["bday_add", "bday_create"], registration);
         registry.Build();
 
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, _optionsMonitor, serviceProvider);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var middleware = new CommandRoutingMiddleware(registry, _botInfo, serviceProvider);
         var context = CreateCommandContext("play", ChatType.Private);
         context.VirtualRoute = "bday_create";
         var called = false;
 
         // act
-        await middleware.InvokeAsync(context, () => { called = true; return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+        await middleware.InvokeAsync(context, () => { called = true; return ValueTask.CompletedTask; }, TestContext.Current.CancellationToken);
 
         // assert
         called.Should().BeTrue();
+        context.RouteResult.Status.Should().Be(CommandRouteStatus.Success);
+        context.MatchedRegistration.Should().BeSameAs(registration);
         context.MatchedCommandMetadata.Should().NotBeNull();
         context.MatchedCommandMetadata!.HandlerInstance.Should().BeSameAs(handler);
     }
 
-    // verifies that commands added to the bot configuration's ignore list are skipped without pipeline progression or metadata setting
-    [Fact]
-    public async Task InvokeAsync_WhenCommandIsInIgnoreList_ShouldSkipAndShortCircuit()
-    {
-        // arrange
-        var optionsMonitor = Substitute.For<IOptionsMonitor<TelegramBotOptions>>();
-        optionsMonitor.CurrentValue.Returns(new TelegramBotOptions { IgnoredCommands = ["price"] });
-
-        var (invokerType, invoker, _) = CreateMockInvoker<DummyHandler1, DummyParams1>();
-        var registry = new CommandHandlerRegistry();
-        registry.Register("bday_set", ["bday_add", "bday_create"], invokerType);
-        registry.Build();
-
-        var serviceProvider = CreateMockServiceProvider(new() { [invokerType] = invoker });
-        var middleware = new CommandRoutingMiddleware(registry, _botInfo, optionsMonitor, serviceProvider);
-        var context = CreateCommandContext("price", ChatType.Private);
-        var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
-
-        // act
-        await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
-
-        // assert
-        called.Should().BeFalse();
-        context.MatchedCommandMetadata.Should().BeNull();
-    }
-
-    private CommandContext CreateCommandContext(
+    private static CommandContext CreateCommandContext(
         string command,
         ChatType chatType,
         string? targetBotUsername = null)

@@ -13,7 +13,7 @@ public sealed class ChosenInlineResultRoutingMiddlewareTests
     {
         public bool CanHandle(ChosenInlineResult chosenResult) => canHandle;
 
-        public Task HandleAsync(ChosenInlineResultContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task HandleAsync(ChosenInlineResultContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     // verifies that a matching handler is resolved and mapped with metadata to the context when criteria are satisfied
@@ -27,7 +27,7 @@ public sealed class ChosenInlineResultRoutingMiddlewareTests
         var chosenResult = new ChosenInlineResult { ResultId = "res_123", From = new User { Id = 1, FirstName = "Test" } };
         var context = new ChosenInlineResultContext(chosenResult);
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);
@@ -51,7 +51,7 @@ public sealed class ChosenInlineResultRoutingMiddlewareTests
         var chosenResult = new ChosenInlineResult { ResultId = "res_123", From = new User { Id = 1, FirstName = "Test" } };
         var context = new ChosenInlineResultContext(chosenResult);
         var called = false;
-        NextDelegate nextDelegate = () => { called = true; return Task.CompletedTask; };
+        NextDelegate nextDelegate = () => { called = true; return ValueTask.CompletedTask; };
 
         // act
         await middleware.InvokeAsync(context, nextDelegate, TestContext.Current.CancellationToken);

@@ -128,8 +128,11 @@ public sealed class ArgumentParserTests
     [InlineData("   \t \r\n  ")]
     public void ParseArgs_WhenInputIsNullOrWhiteSpace_ShouldReturnEmptyList(string? input)
     {
+        // arrange
+        var rawInput = input;
+
         // act
-        var result = ArgumentParser.ParseArgs(input);
+        var result = ArgumentParser.ParseArgs(rawInput!);
 
         // assert
         result.Should().BeEmpty();
@@ -161,6 +164,24 @@ public sealed class ArgumentParserTests
 
         // act
         var act = () => ArgumentParser.ParseArgs(input);
+
+        // assert
+        act.Should().Throw<InputParsingException>()
+            .Which.Input.Should().Be(input);
+    }
+
+    // verifies that an unclosed typographical quotation mark causes an InputParsingException
+    [Theory]
+    [InlineData("«unclosed value")]
+    [InlineData("“unclosed value")]
+    [InlineData("„unclosed value")]
+    public void ParseArgs_WhenUnclosedTypographicalQuoteIsProvided_ShouldThrowInputParsingException(string input)
+    {
+        // arrange
+        var rawInput = input;
+
+        // act
+        var act = () => ArgumentParser.ParseArgs(rawInput);
 
         // assert
         act.Should().Throw<InputParsingException>()
@@ -215,5 +236,200 @@ public sealed class ArgumentParserTests
         result[1].Should().Be("two");
         result[2].Should().Be("three four");
         result[3].Should().Be("key=val");
+    }
+
+    // verifies that a trailing backslash at the very end of the input is preserved as a literal backslash
+    [Fact]
+    public void ParseArgs_WhenTrailingBackslashIsAtEndOfInput_ShouldPreserveIt()
+    {
+        // arrange
+        var input = "folder\\";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be("folder\\");
+    }
+
+    // verifies that an input consisting solely of a backslash yields a single literal backslash
+    [Fact]
+    public void ParseArgs_WhenInputIsOnlyBackslash_ShouldReturnSingleBackslash()
+    {
+        // arrange
+        var input = "\\";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be("\\");
+    }
+
+    // verifies that a token starting with an escaped quote is parsed correctly
+    [Fact]
+    public void ParseArgs_WhenTokenStartsWithEscape_ShouldParseCorrectly()
+    {
+        // arrange
+        var input = "\\\"quoted\\\"";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be("\"quoted\"");
+    }
+
+    // verifies that an escaped whitespace character does not split the token
+    [Fact]
+    public void ParseArgs_WhenSpaceIsEscaped_ShouldNotSplitToken()
+    {
+        // arrange
+        var input = "hello\\ world";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be("hello world");
+    }
+
+    // verifies that an escaped backslash outside quotes resolves to a single literal backslash
+    [Fact]
+    public void ParseArgs_WhenBackslashIsEscapedOutsideQuotes_ShouldPreserveLiteralBackslash()
+    {
+        // arrange
+        var input = "a\\\\b";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be("a\\b");
+    }
+
+    // verifies that a quote appearing mid-token toggles quoting without splitting the token
+    [Fact]
+    public void ParseArgs_WhenQuoteAppearsMidToken_ShouldToggleQuoting()
+    {
+        // arrange
+        var input = "ab\"cd ef\"gh";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be("abcd efgh");
+    }
+
+    // verifies that adjacent quoted and unquoted segments merge into a single token
+    [Fact]
+    public void ParseArgs_WhenQuotesAreAdjacentToText_ShouldMergeIntoOneToken()
+    {
+        // arrange
+        var input = "a\"b\"c \"d\"e";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().HaveCount(2);
+        result[0].Should().Be("abc");
+        result[1].Should().Be("de");
+    }
+
+    // verifies that a token consisting only of typographic quotes yields an empty string
+    [Fact]
+    public void ParseArgs_WhenTokenIsOnlyTypographicQuotes_ShouldReturnEmptyString()
+    {
+        // arrange
+        var input = "«»";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be(string.Empty);
+    }
+
+    // verifies that a quoted token longer than the stackalloc threshold is parsed correctly
+    [Fact]
+    public void ParseArgs_WhenTokenExceedsStackallocThreshold_ShouldParseCorrectly()
+    {
+        // arrange
+        var longValue = new string('x', 200);
+        var input = $"key=\"{longValue}\"";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be($"key={longValue}");
+    }
+
+    // verifies that a complex token at the beginning of a long input does not break parsing
+    [Fact]
+    public void ParseArgs_WhenComplexTokenStartsAtBeginningOfLongInput_ShouldNotThrow()
+    {
+        // arrange
+        var input = "\"a\" " + new string('b', 5000);
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().HaveCount(2);
+        result[0].Should().Be("a");
+        result[1].Should().Be(new string('b', 5000));
+    }
+
+    // verifies that an empty quoted argument at the end of the input is preserved as an empty string
+    [Fact]
+    public void ParseArgs_WhenInputEndsWithQuotedEmpty_ShouldPreserveIt()
+    {
+        // arrange
+        var input = "a \"\"";
+
+        // act
+        var result = ArgumentParser.ParseArgs(input);
+
+        // assert
+        result.Should().HaveCount(2);
+        result[0].Should().Be("a");
+        result[1].Should().Be(string.Empty);
+    }
+
+    // verifies that every typographic quote character is normalized and stripped correctly
+    [Theory]
+    [InlineData("«value»")]
+    [InlineData("“value”")]
+    [InlineData("„value“")]
+    [InlineData("„value”")]
+    [InlineData("“value„")]
+    public void ParseArgs_WhenEachTypographicQuoteIsUsed_ShouldNormalizeAndStrip(string input)
+    {
+        // arrange
+        var rawInput = input;
+
+        // act
+        var result = ArgumentParser.ParseArgs(rawInput);
+
+        // assert
+        result.Should().ContainSingle().Which.Should().Be("value");
+    }
+
+    // verifies that the original input is preserved in the exception even when the unclosed quote follows escaped content
+    [Fact]
+    public void ParseArgs_WhenUnclosedQuoteFollowsEscapedContent_ShouldPreserveOriginalInput()
+    {
+        // arrange
+        var input = "a\\\\b \"unclosed";
+
+        // act
+        var act = () => ArgumentParser.ParseArgs(input);
+
+        // assert
+        act.Should().Throw<InputParsingException>()
+            .Which.Input.Should().Be(input);
     }
 }

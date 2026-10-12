@@ -10,9 +10,9 @@ namespace Telegram.BotKit.Tests.Messages;
 
 public sealed class MessageExecutionMiddlewareTests
 {
-    // verifies that the execution middleware invokes the matched message handler when it is present in the context
+    // verifies that execution middleware invokes the matched message handler and does not call next
     [Fact]
-    public async Task InvokeAsync_WhenMatchedHandlerIsNotNull_ShouldExecuteHandler()
+    public async Task InvokeAsync_WhenMatchedHandlerIsNotNull_ShouldExecuteHandlerAndNotCallNext()
     {
         // arrange
         var handler = Substitute.For<IMessageHandler>();
@@ -24,18 +24,24 @@ public sealed class MessageExecutionMiddlewareTests
             MatchedHandler = handler
         };
 
-        NextDelegate next = () => Task.CompletedTask;
+        var nextCalled = false;
+        NextDelegate next = () =>
+        {
+            nextCalled = true;
+            return ValueTask.CompletedTask;
+        };
 
         // act
         await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // assert
         await handler.Received(1).HandleAsync(context, TestContext.Current.CancellationToken);
+        nextCalled.Should().BeFalse();
     }
 
-    // verifies that the execution middleware cleanly completes without attempting execution when matched handler is null
+    // verifies that execution middleware cleanly completes without calling next when matched handler is null
     [Fact]
-    public async Task InvokeAsync_WhenMatchedHandlerIsNull_ShouldDoNothing()
+    public async Task InvokeAsync_WhenMatchedHandlerIsNull_ShouldCompleteWithoutCallingNext()
     {
         // arrange
         var middleware = new MessageExecutionMiddleware();
@@ -45,12 +51,19 @@ public sealed class MessageExecutionMiddlewareTests
             MatchedHandler = null
         };
 
-        NextDelegate next = () => Task.CompletedTask;
+        var nextCalled = false;
+        NextDelegate next = () =>
+        {
+            nextCalled = true;
+            return ValueTask.CompletedTask;
+        };
 
         // act
-        var act = () => middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
+        var result = middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
+        await result;
 
         // assert
-        await act.Should().NotThrowAsync();
+        result.IsCompletedSuccessfully.Should().BeTrue();
+        nextCalled.Should().BeFalse();
     }
 }
