@@ -5,8 +5,16 @@ namespace Telegram.BotKit.Example.Converters;
 /// <summary>
 /// Converts date strings supporting special "today" and "tomorrow" keywords.
 /// </summary>
-public class CustomDateConverter : IValueConverter
+public sealed class CustomDateConverter(TimeProvider? timeProvider = null) : IValueConverter
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
+    public bool CanConvert(Type targetType)
+    {
+        var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        return actualType == typeof(DateTime) || actualType == typeof(DateOnly);
+    }
+
     public object? Convert(ValueConversionContext context)
     {
         if (TryConvert(context, out var result))
@@ -22,39 +30,39 @@ public class CustomDateConverter : IValueConverter
     public bool TryConvert(ValueConversionContext context, out object? result)
     {
         result = null;
-        var (input, targetType, _) = context;
 
-        // unwrap nullable types (e.g. DateTime? or DateOnly?)
-        var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-
-        // check if this converter supports the target type
-        if (actualType != typeof(DateTime) && actualType != typeof(DateTime?))
+        if (!CanConvert(context.TargetType))
         {
             return false;
         }
 
-        // handle empty inputs safely
-        if (string.IsNullOrWhiteSpace(input))
+        var input = context.Input.AsSpan().Trim();
+        if (input.IsEmpty)
         {
             return false;
         }
 
-        // map keyword to DateTime
-        DateTime? resolvedDate = input.Trim().ToLowerInvariant() switch
-        {
-            "today" => DateTime.Today,
-            "tomorrow" => DateTime.Today.AddDays(1),
-            _ => null
-        };
+        var today = _timeProvider.GetLocalNow().Date;
 
-        if (resolvedDate is null)
+        DateTime resolvedDate;
+        if (input.Equals("today", StringComparison.OrdinalIgnoreCase))
+        {
+            resolvedDate = today;
+        }
+        else if (input.Equals("tomorrow", StringComparison.OrdinalIgnoreCase))
+        {
+            resolvedDate = today.AddDays(1);
+        }
+        else
         {
             return false;
         }
+
+        var actualType = Nullable.GetUnderlyingType(context.TargetType) ?? context.TargetType;
 
         result = actualType == typeof(DateOnly)
-            ? DateOnly.FromDateTime(resolvedDate.Value)
-            : resolvedDate.Value;
+            ? DateOnly.FromDateTime(resolvedDate)
+            : resolvedDate;
 
         return true;
     }

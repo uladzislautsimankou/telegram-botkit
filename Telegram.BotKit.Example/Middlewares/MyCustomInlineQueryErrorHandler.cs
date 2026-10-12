@@ -16,7 +16,7 @@ internal sealed class MyCustomInlineQueryErrorHandler(
     ILogger<MyCustomInlineQueryErrorHandler> logger
     ) : IInlineQueryMiddleware
 {
-    public async Task InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public async ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         try
         {

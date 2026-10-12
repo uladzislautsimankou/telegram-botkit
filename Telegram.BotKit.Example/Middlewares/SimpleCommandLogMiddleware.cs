@@ -10,7 +10,7 @@ namespace Telegram.BotKit.Example.Middlewares;
 /// </summary>
 internal sealed class SimpleCommandLogMiddleware(ILogger<SimpleCommandLogMiddleware> logger) : ICommandMiddleware
 {
-    public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public async ValueTask InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         logger.LogInformation("Middleware: Processing command '/{Command}' from User {UserId}",
             context.Command, context.Message.From?.Id);
