@@ -6,39 +6,39 @@ using Telegram.BotKit.Shared.Exceptions;
 namespace Telegram.BotKit.Shared.Binding;
 
 /// <summary>
-/// Metadata representing properties to bind.
+/// Metadata representing properties to bind along with compiled setter delegates.
 /// </summary>
 internal record ParamMetadata(
     PropertyInfo PropertyInfo,
     string? Name,
     int Position,
     bool Required,
-    Type PropertyType
+    Type PropertyType,
+    IValueConverter Converter,
+    Action<object, object?> Setter
 );
 
 /// <summary>
 /// Base class providing capability of binding raw inputs into strongly-typed parameter models.
 /// </summary>
-internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConverter> converters) 
+internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConverter> converters)
     where TAttribute : Attribute
 {
-    // cache parameter metadata to avoid performing reflection lookups on every invocation
     private readonly ConcurrentDictionary<Type, List<ParamMetadata>> _cache = new();
     private readonly IValueConverter[] _reversedConverters = converters.Reverse().ToArray();
 
     protected TParams BindInternal<TParams>(List<string> rawParams) where TParams : new()
     {
-        // split raw arguments into a positional queue and named arguments dictionary
         var (positionalQueue, namedArgs) = SplitParams(rawParams);
 
         var instance = new TParams();
         var metadataList = _cache.GetOrAdd(typeof(TParams), BuildMetadata);
 
-        foreach (var meta in metadataList)
+        for (var i = 0; i < metadataList.Count; i++)
         {
+            var meta = metadataList[i];
             var rawValue = GetRawValue(meta, namedArgs, positionalQueue, metadataList);
 
-            // validate presence of required parameters
             if (rawValue is null)
             {
                 if (meta.Required)
@@ -47,14 +47,8 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
                 continue;
             }
 
-            // convert the raw string value to the target property type
-            try
-            {
-                var conversionCtx = new ValueConversionContext(rawValue, meta.PropertyType, instance);
-                var value = ConvertValue(conversionCtx);
-                meta.PropertyInfo.SetValue(instance, value);
-            }
-            catch (Exception)
+            var conversionCtx = new ValueConversionContext(rawValue, meta.PropertyType, instance);
+            if (!meta.Converter.TryConvert(conversionCtx, out var value))
             {
                 throw new InvalidParameterTypeException(
                     parameterName: meta.Name ?? meta.PropertyInfo.Name,
@@ -62,6 +56,8 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
                     targetType: meta.PropertyType
                 );
             }
+
+            meta.Setter(instance, value);
         }
 
         return instance;
@@ -70,12 +66,31 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
     private List<ParamMetadata> BuildMetadata(Type type)
     {
         return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite)
             .Select(p => (Prop: p, Attr: p.GetCustomAttribute<TAttribute>()))
             .Where(x => x.Attr is not null)
-            // invoke the abstract mapper method implemented by concrete binders
-            .Select(x => MapAttribute(x.Prop, x.Attr!))
+            .Select(x =>
+            {
+                var meta = MapAttribute(x.Prop, x.Attr!);
+                var converter = ResolveConverter(meta.PropertyType);
+                return meta with { Converter = converter };
+            })
             .OrderBy(m => m.Position)
             .ToList();
+    }
+
+    private IValueConverter ResolveConverter(Type targetType)
+    {
+        for (var i = 0; i < _reversedConverters.Length; i++)
+        {
+            var converter = _reversedConverters[i];
+            if (converter.CanConvert(targetType))
+            {
+                return converter;
+            }
+        }
+
+        return _reversedConverters[0];
     }
 
     private static string? GetRawValue(
@@ -84,11 +99,9 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
         Queue<string> positional,
         List<ParamMetadata> allMetadata)
     {
-        // match parameter by name
         var key = meta.Name ?? meta.PropertyInfo.Name;
         if (named.TryGetValue(key, out var namedVal)) return namedVal;
 
-        // match parameter by position
         if (meta.Position >= 0 && positional.Count > 0)
         {
             var isLastPositionalString = meta.PropertyType == typeof(string)
@@ -114,16 +127,15 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
         var positional = new Queue<string>(rawParams.Count);
         var named = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var param in rawParams)
+        for (var i = 0; i < rawParams.Count; i++)
         {
+            var param = rawParams[i];
             var span = param.AsSpan();
             var eqIndex = span.IndexOf('=');
 
             if (eqIndex > 0)
             {
-                var key = span.Slice(0, eqIndex).ToString();
-                var val = span.Slice(eqIndex + 1).ToString();
-                named[key] = val;
+                named[span[..eqIndex].ToString()] = span[(eqIndex + 1)..].ToString();
             }
             else
             {
@@ -131,17 +143,6 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
             }
         }
         return (positional, named);
-    }
-
-    private object? ConvertValue(ValueConversionContext context)
-    {
-        if (string.IsNullOrWhiteSpace(context.Input)) return null;
-
-        foreach (var converter in _reversedConverters)
-        {
-            if (converter.TryConvert(context, out var result)) return result;
-        }
-        throw new NotSupportedException($"No converter found for type {context.TargetType.Name}");
     }
 
     /// <summary>

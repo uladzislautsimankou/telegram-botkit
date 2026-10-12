@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Commands.Attributes;
+namespace Telegram.BotKit.Commands.Attributes;
 
 /// <summary>
 /// Specifies binding options for a command parameter property.
@@ -20,7 +20,7 @@ public sealed class CommandParamAttribute : Attribute
 
     /// <summary>
     /// Gets a value indicating whether the parameter is required.
-    /// If true, the binder will throw an exception if the value is missing in the command arguments.
+    /// If true, the binder throws an exception when the value is missing.
     /// </summary>
-    public bool Required { get; init; } = false;
+    public bool Required { get; init; }
 }

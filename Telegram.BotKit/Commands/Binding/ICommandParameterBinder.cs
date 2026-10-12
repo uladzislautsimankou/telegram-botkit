@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Commands.Models;
+using Telegram.BotKit.Commands.Models;
 
 namespace Telegram.BotKit.Commands.Binding;
 

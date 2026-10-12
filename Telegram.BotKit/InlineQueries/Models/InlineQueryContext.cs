@@ -34,7 +34,7 @@ public sealed class InlineQueryContext
     public InlineQuery Query { get; }
 
     /// <summary>
-    /// Gets a snapshot of the aggregated inline results accumulated from all matched handlers.
+    /// Gets a thread-safe snapshot of the aggregated inline results accumulated from all matched handlers.
     /// </summary>
     public IReadOnlyList<InlineQueryResult> Results
     {
@@ -48,7 +48,7 @@ public sealed class InlineQueryContext
     }
 
     /// <summary>
-    /// Gets a snapshot of exceptions captured from individual handlers that failed during parallel execution.
+    /// Gets a view of exceptions captured from individual handlers that failed during parallel execution.
     /// </summary>
     public IReadOnlyList<Exception> Exceptions
     {
@@ -56,7 +56,7 @@ public sealed class InlineQueryContext
         {
             lock (_sync)
             {
-                return _exceptions.ToArray();
+                return _exceptions;
             }
         }
     }

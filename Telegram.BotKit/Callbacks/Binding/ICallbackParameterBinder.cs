@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Callbacks.Models;
+using Telegram.BotKit.Callbacks.Models;
 
 namespace Telegram.BotKit.Callbacks.Binding;
 

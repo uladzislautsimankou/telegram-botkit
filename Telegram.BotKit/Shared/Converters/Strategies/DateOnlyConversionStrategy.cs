@@ -4,27 +4,27 @@ namespace Telegram.BotKit.Shared.Converters.Strategies;
 
 internal sealed class DateOnlyConversionStrategy : IConversionStrategy
 {
-    private static readonly string[] _formats =
+    private static readonly string[] Formats =
     [
-        "yyyy-MM-dd", // ISO
-        "dd.MM.yyyy", // EU / RU
+        "yyyy-MM-dd",
+        "dd.MM.yyyy",
         "dd-MM-yyyy",
         "yyyy/MM/dd",
-        "MM/dd/yyyy"  // US
+        "MM/dd/yyyy"
     ];
 
     public bool CanConvert(Type targetType) => targetType == typeof(DateOnly);
 
     public object Convert(string input, Type targetType)
     {
-        if (TryParse(input, out var date))
+        if (TryParse(input.AsSpan(), out var date))
         {
             return date;
         }
 
-        throw new FormatException($"String '{input}' was not recognized as a valid DateOnly. Supported formats: {string.Join(", ", _formats)}");
+        throw new FormatException($"String '{input}' was not recognized as a valid DateOnly. Supported formats: {string.Join(", ", Formats)}");
     }
 
-    internal static bool TryParse(string input, out DateOnly date) =>
-        DateOnly.TryParseExact(input, _formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+    internal static bool TryParse(ReadOnlySpan<char> input, out DateOnly date) =>
+        DateOnly.TryParseExact(input, Formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
 }

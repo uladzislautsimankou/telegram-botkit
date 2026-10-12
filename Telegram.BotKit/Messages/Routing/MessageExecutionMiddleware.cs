@@ -9,11 +9,13 @@ namespace Telegram.BotKit.Messages.Routing;
 /// </summary>
 internal sealed class MessageExecutionMiddleware : IMessageMiddleware
 {
-    public async Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public ValueTask InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        if (context.MatchedHandler is not null)
+        if (context.MatchedHandler is null)
         {
-            await context.MatchedHandler.HandleAsync(context, cancellationToken);
+            return ValueTask.CompletedTask;
         }
+
+        return new ValueTask(context.MatchedHandler.HandleAsync(context, cancellationToken));
     }
 }

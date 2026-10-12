@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Commands.Models;
+using Telegram.BotKit.Commands.Models;
 
 namespace Telegram.BotKit.Commands.Abstractions;
 
@@ -16,9 +16,8 @@ public interface ICommandHandler<TParams> where TParams : class, new()
     /// <summary> 
     /// Gets a collection of alternative command names (aliases) that can be used
     /// to invoke the handler in addition to the primary <see cref="Command"/>.
-    /// If no aliases are defined, returns an empty array.
     /// </summary>
-    static virtual string[] Aliases => Array.Empty<string>();
+    static virtual string[] Aliases => [];
 
     /// <summary>
     /// Handles the command execution.

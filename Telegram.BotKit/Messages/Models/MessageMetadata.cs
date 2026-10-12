@@ -3,4 +3,4 @@
 /// <summary>
 /// Encapsulates runtime metadata about the matched message handler.
 /// </summary>
-public record MessageMetadata(Type HandlerType, object HandlerInstance);
+public sealed record MessageMetadata(Type HandlerType, object HandlerInstance);

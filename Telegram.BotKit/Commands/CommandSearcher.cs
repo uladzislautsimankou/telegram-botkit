@@ -1,7 +1,8 @@
-﻿namespace Telegram.BotKit.Commands;
+namespace Telegram.BotKit.Commands;
 
 /// <summary>
-/// Provides fuzzy searching and spelling suggestion capabilities for bot commands using Damerau-Levenshtein distance.
+/// Provides fuzzy searching and spelling suggestions for bot commands using Damerau-Levenshtein distance.
+/// Searches input up to 64 characters with adaptive edit distance thresholds.
 /// </summary>
 internal sealed class CommandSearcher(IEnumerable<string> commands)
 {
@@ -20,40 +21,42 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
     /// </summary>
     /// <param name="input">The misspelled command entered by the user.</param>
     /// <returns>A list of up to three close command suggestions ordered by similarity.</returns>
-    public List<string> FindSimilar(string input)
+    public IReadOnlyList<string> FindSimilar(string input)
     {
         if (string.IsNullOrWhiteSpace(input) || input.Length > MaxCommandLength)
-            return new List<string>();
+        {
+            return [];
+        }
 
         var inputNorm = Normalize(input);
 
         if (inputNorm.Length == 0)
-            return new List<string>();
+        {
+            return [];
+        }
 
         var inputSorted = SortChars(inputNorm);
 
-        // adaptive error threshold
-        // up to 4 characters (e.g. ping): maximum 1 error
-        // more than 4 characters (e.g. weather): maximum 2 errors
+        // adaptive error threshold: max 1 error for <= 4 chars, max 2 for longer
         var maxDist = inputNorm.Length <= 4 ? 1 : 2;
 
-        var candidates = new List<(string Cmd, int Score)>();
+        var buffer = new TopMatchesBuffer(input.Length);
 
-        foreach (var item in _index)
+        for (var i = 0; i < _index.Length; i++)
         {
+            var item = _index[i];
             var currentBestDist = int.MaxValue;
 
-            // check only if lengths are comparable (e.g., png -> ping)
+            // check only if lengths are comparable
             if (Math.Abs(inputNorm.Length - item.Normalized.Length) <= maxDist)
             {
                 var dist = DamerauLevenshtein(inputNorm.AsSpan(), item.Normalized.AsSpan(), maxDist);
                 currentBestDist = Math.Min(currentBestDist, dist);
             }
 
-            // if the command is longer than the input, check its prefix (e.g., wether -> weather_minsk)
+            // check prefix match if command is longer than input
             if (item.Normalized.Length > inputNorm.Length)
             {
-                // take a slice of the command equal to input length + 1 to account for a missing character
                 var lengthToTake = Math.Min(item.Normalized.Length, inputNorm.Length + 1);
                 var prefix = item.Normalized.AsSpan().Slice(0, lengthToTake);
 
@@ -61,44 +64,109 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
                 currentBestDist = Math.Min(currentBestDist, dist);
             }
 
-            // fallback: if standard matches yield no results, check sorted character sequence (e.g., check_bday -> bday_check)
-            if (currentBestDist > maxDist)
+            // fallback to sorted character sequence match
+            if (currentBestDist > maxDist && Math.Abs(inputNorm.Length - item.Normalized.Length) <= maxDist)
             {
-                // sorted character matching requires comparable lengths as prefix matching does not apply
-                if (Math.Abs(inputNorm.Length - item.Normalized.Length) <= maxDist)
-                {
-                    var dist = DamerauLevenshtein(inputSorted.AsSpan(), item.Sorted.AsSpan(), maxDist);
-                    currentBestDist = Math.Min(currentBestDist, dist);
-                }
+                var dist = DamerauLevenshtein(inputSorted.AsSpan(), item.Sorted.AsSpan(), maxDist);
+                currentBestDist = Math.Min(currentBestDist, dist);
             }
 
             if (currentBestDist <= maxDist)
             {
-                candidates.Add((item.Command, currentBestDist));
+                buffer.TryAdd(item.Command, currentBestDist);
             }
         }
 
-        return candidates
-            .OrderBy(x => x.Score)
-            .ThenBy(x => Math.Abs(x.Cmd.Length - input.Length)) // tie-breaker: prefer candidate with closer length to input
-            .Take(3)
-            .Select(x => x.Cmd)
-            .ToList();
+        return buffer.ToResult();
+    }
+
+    private ref struct TopMatchesBuffer(int targetLength)
+    {
+        private string? _cmd0;
+        private int _score0 = int.MaxValue;
+
+        private string? _cmd1;
+        private int _score1 = int.MaxValue;
+
+        private string? _cmd2;
+        private int _score2 = int.MaxValue;
+
+        public void TryAdd(string cmd, int score)
+        {
+            if (IsBetter(cmd, score, _cmd0, _score0))
+            {
+                _cmd2 = _cmd1; _score2 = _score1;
+                _cmd1 = _cmd0; _score1 = _score0;
+                _cmd0 = cmd; _score0 = score;
+            }
+            else if (IsBetter(cmd, score, _cmd1, _score1))
+            {
+                _cmd2 = _cmd1; _score2 = _score1;
+                _cmd1 = cmd; _score1 = score;
+            }
+            else if (IsBetter(cmd, score, _cmd2, _score2))
+            {
+                _cmd2 = cmd; _score2 = score;
+            }
+        }
+
+        private readonly bool IsBetter(string newCmd, int newScore, string? currentCmd, int currentScore)
+        {
+            if (currentCmd is null)
+            {
+                return true;
+            }
+
+            if (newScore < currentScore)
+            {
+                return true;
+            }
+
+            if (newScore > currentScore)
+            {
+                return false;
+            }
+
+            return Math.Abs(newCmd.Length - targetLength) < Math.Abs(currentCmd.Length - targetLength);
+        }
+
+        public readonly List<string> ToResult()
+        {
+            var list = new List<string>(3);
+            if (_cmd0 is not null)
+            {
+                list.Add(_cmd0);
+            }
+
+            if (_cmd1 is not null)
+            {
+                list.Add(_cmd1);
+            }
+
+            if (_cmd2 is not null)
+            {
+                list.Add(_cmd2);
+            }
+
+            return list;
+        }
     }
 
     private static string Normalize(string s)
     {
         if (string.IsNullOrEmpty(s))
+        {
             return string.Empty;
+        }
 
-        // keep only alphanumeric characters and normalize to lowercase (e.g., weather_minsk -> weatherminsk)
+        // keep only alphanumeric characters and normalize to lowercase
         var buffer = s.Length <= StackallocCharThreshold
             ? stackalloc char[s.Length]
             : new char[s.Length];
 
         var index = 0;
 
-        foreach (char c in s)
+        foreach (var c in s)
         {
             if (char.IsLetterOrDigit(c))
             {
@@ -114,7 +182,9 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
     private static string SortChars(string s)
     {
         if (string.IsNullOrEmpty(s))
+        {
             return string.Empty;
+        }
 
         var buffer = s.Length <= StackallocCharThreshold
             ? stackalloc char[s.Length]
@@ -128,9 +198,10 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
     private static int DamerauLevenshtein(ReadOnlySpan<char> source, ReadOnlySpan<char> target, int threshold)
     {
-        // return early if length difference exceeds the threshold
         if (Math.Abs(source.Length - target.Length) > threshold)
+        {
             return threshold + 1;
+        }
 
         var length1 = source.Length;
         var length2 = target.Length;
@@ -143,13 +214,20 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
         var width = length2 + 1;
 
-        for (int i = 0; i <= length1; i++) d[i * width] = i;
-        for (int j = 0; j <= length2; j++) d[j] = j;
+        for (var i = 0; i <= length1; i++)
+        {
+            d[i * width] = i;
+        }
 
-        for (int i = 1; i <= length1; i++)
+        for (var j = 0; j <= length2; j++)
+        {
+            d[j] = j;
+        }
+
+        for (var i = 1; i <= length1; i++)
         {
             var minRowDist = int.MaxValue;
-            for (int j = 1; j <= length2; j++)
+            for (var j = 1; j <= length2; j++)
             {
                 var cost = source[i - 1] == target[j - 1] ? 0 : 1;
 
@@ -159,7 +237,7 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
 
                 var current = Math.Min(deletion, Math.Min(insertion, substitution));
 
-                // transposition (e.g., pnig -> ping)
+                // transposition check
                 if (i > 1 && j > 1 && source[i - 1] == target[j - 2] && source[i - 2] == target[j - 1])
                 {
                     var trans = d[(i - 2) * width + (j - 2)] + cost;
@@ -167,12 +245,17 @@ internal sealed class CommandSearcher(IEnumerable<string> commands)
                 }
 
                 d[i * width + j] = current;
-                if (current < minRowDist) minRowDist = current;
+                if (current < minRowDist)
+                {
+                    minRowDist = current;
+                }
             }
 
             // exit early if all edit distances in the row exceed the threshold
             if (minRowDist > threshold)
+            {
                 return threshold + 1;
+            }
         }
 
         return d[length1 * width + length2];

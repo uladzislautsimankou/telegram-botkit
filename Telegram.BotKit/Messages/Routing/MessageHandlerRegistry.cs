@@ -1,10 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Telegram.BotKit.Messages.Abstractions;
+﻿using System.Collections.Frozen;
 
 namespace Telegram.BotKit.Messages.Routing;
 
 /// <summary>
-/// A thread-safe registry that groups message handler types by their required user states.
+/// A registry that groups message handler types by their required user states using frozen lookup structures.
 /// </summary>
 internal sealed class MessageHandlerRegistry
 {
@@ -21,17 +20,43 @@ internal sealed class MessageHandlerRegistry
                 list = [];
                 _stateHandlerTypes[trimmedState] = list;
             }
-            list.Add(handlerType);
+
+            if (!list.Contains(handlerType))
+            {
+                list.Add(handlerType);
+            }
         }
         else
         {
-            _globalHandlerTypes.Add(handlerType);
+            if (!_globalHandlerTypes.Contains(handlerType))
+            {
+                _globalHandlerTypes.Add(handlerType);
+            }
         }
     }
 
-    public IReadOnlyList<Type> GetHandlerTypesForState(string state) => _stateHandlerTypes.TryGetValue(state, out var list)
-        ? list
-        : [];
+    /// <summary>
+    /// Builds immutable frozen state lookup structures and flattens handler type arrays.
+    /// </summary>
+    public void Build()
+    {
+        _frozenStateHandlerTypes = _stateHandlerTypes.ToFrozenDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToArray(),
+            StringComparer.OrdinalIgnoreCase);
 
-    public IReadOnlyList<Type> GetGlobalHandlerTypes() => _globalHandlerTypes;
+        _frozenGlobalHandlerTypes = _globalHandlerTypes.ToArray();
+
+        // clear mutable builders to release startup memory
+        _stateHandlerTypes.Clear();
+        _globalHandlerTypes.Clear();
+    }
+
+    public ReadOnlySpan<Type> GetHandlerTypesForState(string state) =>
+        _frozenStateHandlerTypes.TryGetValue(state, out var types) ? types : [];
+
+    public ReadOnlySpan<Type> GetGlobalHandlerTypes() => _frozenGlobalHandlerTypes;
+
+    private FrozenDictionary<string, Type[]> _frozenStateHandlerTypes = FrozenDictionary<string, Type[]>.Empty;
+    private Type[] _frozenGlobalHandlerTypes = [];
 }

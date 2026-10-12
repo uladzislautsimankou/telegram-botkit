@@ -6,7 +6,7 @@ namespace Telegram.BotKit.Messages.Models;
 /// <summary>
 /// Represents the context of an incoming standard message update within the processing pipeline.
 /// </summary>
-public record MessageContext
+public sealed record MessageContext
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="MessageContext"/> class.

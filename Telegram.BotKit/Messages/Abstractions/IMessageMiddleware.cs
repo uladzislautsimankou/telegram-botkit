@@ -16,5 +16,5 @@ public interface IMessageMiddleware
     /// <param name="next">The delegate representing the next middleware in the pipeline.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the execution of the middleware.</returns>
-    Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default);
+    ValueTask InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default);
 }

@@ -1,27 +1,31 @@
-﻿using Telegram.Bot.Types;
+using Telegram.Bot.Types;
 using Telegram.BotKit.Commands.Invocation;
 using Telegram.BotKit.Commands.Parsing;
+using Telegram.BotKit.Helpers;
 
 namespace Telegram.BotKit.Commands.Models;
 
 /// <summary>
 /// Represents the execution context for an incoming text command update.
-/// Encapsulates the original Telegram message, parsed triggers, bot targeting details, and bound route information.
 /// </summary>
-public record CommandContext
+public sealed record CommandContext
 {
+    private readonly string _rawArgs;
+    private List<string>? _rawParams;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandContext"/> class.
-    /// Parses the raw message text into a structured command trigger, target bot, and positional/named parameters.
     /// </summary>
     /// <param name="message">The incoming message containing the command string to process.</param>
     public CommandContext(Message message)
     {
+        ArgumentNullException.ThrowIfNull(message);
+
         Message = message;
-        var parsed = CommandParser.Parse(message.Text);
-        Command = parsed.Command;
-        TargetBotUsername = parsed.BotUsername;
-        RawParams = parsed.Parameters;
+        var header = CommandParser.ParseHeader(message.Text);
+        Command = header.Command;
+        TargetBotUsername = header.BotUsername;
+        _rawArgs = header.RawArgs;
     }
 
     /// <summary>
@@ -30,36 +34,38 @@ public record CommandContext
     public Message Message { get; }
 
     /// <summary>
-    /// Gets the primary command trigger name extracted from the message text (e.g., "start" for /start).
-    /// This trigger does not include the leading slash or any targeted bot usernames.
+    /// Gets the primary command trigger name extracted from the message text.
     /// </summary>
     public string Command { get; }
 
     /// <summary>
-    /// Gets the username of the target bot explicitly mentioned in the command string (e.g., "MyBot" in /start@MyBot).
-    /// Returns null if the command was invoked without an explicit bot mention.
+    /// Gets the username of the target bot explicitly mentioned in the command string.
     /// </summary>
     public string? TargetBotUsername { get; }
 
     /// <summary>
-    /// Gets the list of raw string arguments parsed from the portion of the command following the trigger.
-    /// Can contain both positional values and key-value named parameters.
-    /// </summary>
-    public List<string> RawParams { get; }
-
-    /// <summary>
-    /// Gets or sets a virtual route key used for handler matching and custom routing logic.
-    /// When assigned, routing middlewares will evaluate this value for handler dispatching instead of the default command.
+    /// Gets or sets a virtual route key used for custom handler matching.
     /// </summary>
     public string? VirtualRoute { get; set; }
 
     /// <summary>
-    /// Gets or sets the matched command metadata containing details about the handler instance and its resolved interface type.
+    /// Gets or sets the result of evaluating the command route during the routing phase.
+    /// </summary>
+    public CommandRouteResult RouteResult { get; set; }
+
+    /// <summary>
+    /// Gets the list of raw string arguments parsed from the command string following the trigger.
+    /// Lazily parsed on first access to avoid string allocations for unmatched or ignored commands.
+    /// </summary>
+    public List<string> RawParams => _rawParams ??= ArgumentParser.ParseArgs(_rawArgs);
+
+    /// <summary>
+    /// Gets or sets the matched command metadata containing details about the handler instance and its resolved type.
     /// </summary>
     public CommandMetadata? MatchedCommandMetadata { get; set; }
 
     /// <summary>
-    /// Gets or sets the matched handler invoker instance responsible for binding and executing the target command flow.
+    /// Gets or sets the matched command registration containing compiled factory and invoker delegates.
     /// </summary>
-    internal ICommandHandlerInvoker? MatchedInvoker { get; set; }
+    internal CommandRegistration? MatchedRegistration { get; set; }
 }

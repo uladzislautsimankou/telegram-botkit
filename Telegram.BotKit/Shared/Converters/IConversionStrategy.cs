@@ -5,6 +5,9 @@
 /// </summary>
 internal interface IConversionStrategy
 {
+    /// <summary>
+    /// Determines whether this strategy can convert to the specified target type.
+    /// </summary>
     bool CanConvert(Type targetType);
 
     /// <summary>

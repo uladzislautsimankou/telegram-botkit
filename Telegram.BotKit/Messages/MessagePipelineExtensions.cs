@@ -1,19 +1,32 @@
-﻿using System.Reflection;
+﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Reflection;
 using Telegram.BotKit.Messages;
 using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
 using Telegram.BotKit.Messages.Routing;
 using Telegram.BotKit.Shared.Pipeline;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
+/// <summary>
+/// A builder used to configure the message execution pipeline and register message middleware and handlers.
+/// </summary>
 public sealed class MessagePipelineBuilder(IServiceCollection services)
-    : PipelineBuilder<IMessageMiddleware>(services)
+    : PipelineBuilder<IMessageMiddleware, MessageContext>(services)
 {
     /// <summary>
     /// Explicitly defines the routing position in the pipeline.
+    /// If routing is already configured, subsequent calls are ignored.
     /// </summary>
+    /// <returns>The builder instance for method chaining.</returns>
     public MessagePipelineBuilder UseRouting()
     {
+        // prevent duplicate routing steps in the pipeline
+        if (Steps.Any(s => s.Type == PipelineStepType.Routing))
+        {
+            return this;
+        }
+
         Steps.Add(new PipelineStep(PipelineStepType.Routing, typeof(MessageRoutingMiddleware)));
         return this;
     }
@@ -21,21 +34,12 @@ public sealed class MessagePipelineBuilder(IServiceCollection services)
     /// <summary>
     /// Manually registers a specific message handler and registers it in the registry.
     /// </summary>
+    /// <typeparam name="THandler">The concrete handler type implementing <see cref="IMessageHandler"/>.</typeparam>
+    /// <returns>The builder instance for method chaining.</returns>
     public MessagePipelineBuilder AddHandler<THandler>() where THandler : class, IMessageHandler
     {
-        var handlerType = typeof(THandler);
-
-        Services.AddTransient<THandler>();
-        Services.AddTransient<IMessageHandler, THandler>();
-
         var registry = GetOrCreateRegistry();
-
-        var stateProp = handlerType.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
-        var rawState = (string?)stateProp?.GetValue(null);
-        var requiredState = string.IsNullOrWhiteSpace(rawState) ? null : rawState.Trim();
-
-        registry.Register(handlerType, requiredState);
-
+        MessageRegistrationHelper.RegisterHandler(Services, registry, typeof(THandler));
         return this;
     }
 
@@ -53,11 +57,18 @@ public sealed class MessagePipelineBuilder(IServiceCollection services)
     }
 }
 
+/// <summary>
+/// Extension methods for configuring standard message handling and pipeline registration on <see cref="IServiceCollection"/>.
+/// </summary>
 public static class MessageServiceCollectionExtensions
 {
     /// <summary>
     /// Configures the message pipeline and automatically registers all message handlers from the specified assemblies.
     /// </summary>
+    /// <param name="services">The service collection to add components to.</param>
+    /// <param name="configure">An optional configuration callback to customize the middleware pipeline.</param>
+    /// <param name="assemblies">The assemblies to scan for handlers. If omitted, uses the calling assembly.</param>
+    /// <returns>The service collection instance for method chaining.</returns>
     public static IServiceCollection AddMessages(
         this IServiceCollection services,
         Action<MessagePipelineBuilder>? configure = null,
@@ -67,22 +78,20 @@ public static class MessageServiceCollectionExtensions
         services.AddSingleton(registry);
 
         var builder = new MessagePipelineBuilder(services);
-
-        // automatically scan assemblies, register handlers, and generate invokers for them
         var targetAssemblies = assemblies.Length is 0 ? [Assembly.GetCallingAssembly()] : assemblies;
+
         foreach (var assembly in targetAssemblies)
         {
             RegisterHandlersFromAssembly(services, assembly, registry);
         }
 
-        // register required system services
         services.AddTransient<MessageRoutingMiddleware>();
         services.AddTransient<MessageExecutionMiddleware>();
 
-        // configure user pipeline
         configure?.Invoke(builder);
 
-        // default settings if the pipeline is empty
+        registry.Build();
+
         if (builder.Steps.Count is 0)
         {
             builder.UseRouting();
@@ -92,10 +101,12 @@ public static class MessageServiceCollectionExtensions
             builder.Steps.Insert(0, new PipelineStep(PipelineStepType.Routing, typeof(MessageRoutingMiddleware)));
         }
 
-        // executor is always last
         builder.Steps.Add(new PipelineStep(PipelineStepType.Execution, typeof(MessageExecutionMiddleware)));
 
-        services.AddSingleton(builder);
+        var compiledPipeline = builder.Build(static (middleware, context, next, ct) =>
+            middleware.InvokeAsync(context, next, ct));
+
+        services.AddSingleton(compiledPipeline);
         services.AddSingleton<IMessageDispatcher, MessageDispatcher>();
 
         return services;
@@ -105,7 +116,6 @@ public static class MessageServiceCollectionExtensions
     {
         var handlerType = typeof(IMessageHandler);
 
-        // safely retrieve loadable types even if optional dependencies fail to resolve
         Type[] allTypes;
         try
         {
@@ -113,22 +123,30 @@ public static class MessageServiceCollectionExtensions
         }
         catch (ReflectionTypeLoadException ex)
         {
-            allTypes = ex.Types.Where(t => t != null).ToArray()!;
+            allTypes = ex.Types.Where(t => t is not null).ToArray()!;
         }
 
-        var concreteHandlers = allTypes
-            .Where(t => !t.IsAbstract && !t.IsInterface && handlerType.IsAssignableFrom(t));
-
-        foreach (var type in concreteHandlers)
+        for (var i = 0; i < allTypes.Length; i++)
         {
-            services.AddTransient(type);
-            services.AddTransient(handlerType, type);
-
-            var stateProp = type.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
-            var rawState = (string?)stateProp?.GetValue(null);
-            var requiredState = string.IsNullOrWhiteSpace(rawState) ? null : rawState.Trim();
-
-            registry.Register(type, requiredState);
+            var type = allTypes[i];
+            if (!type.IsAbstract && !type.IsInterface && handlerType.IsAssignableFrom(type))
+            {
+                MessageRegistrationHelper.RegisterHandler(services, registry, type);
+            }
         }
+    }
+}
+
+internal static class MessageRegistrationHelper
+{
+    public static void RegisterHandler(IServiceCollection services, MessageHandlerRegistry registry, Type handlerType)
+    {
+        services.TryAddTransient(handlerType);
+
+        var stateProp = handlerType.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
+        var rawState = (string?)stateProp?.GetValue(null);
+        var requiredState = string.IsNullOrWhiteSpace(rawState) ? null : rawState.Trim();
+
+        registry.Register(handlerType, requiredState);
     }
 }

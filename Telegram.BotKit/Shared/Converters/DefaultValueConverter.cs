@@ -2,9 +2,9 @@
 
 namespace Telegram.BotKit.Shared.Converters;
 
-internal class DefaultValueConverter() : IValueConverter
+internal sealed class DefaultValueConverter : IValueConverter
 {
-    private static readonly IConversionStrategy[] _strategies =
+    private static readonly IConversionStrategy[] Strategies =
     [
         new EnumConversionStrategy(),
         new DateTimeConversionStrategy(),
@@ -12,6 +12,25 @@ internal class DefaultValueConverter() : IValueConverter
         new TimeOnlyConversionStrategy(),
         new TypeDescriptorConversionStrategy()
     ];
+
+    public bool CanConvert(Type targetType)
+    {
+        if (targetType == typeof(string))
+        {
+            return true;
+        }
+
+        var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        for (var i = 0; i < Strategies.Length; i++)
+        {
+            if (Strategies[i].CanConvert(actualType))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public object? Convert(ValueConversionContext context)
     {
@@ -35,8 +54,9 @@ internal class DefaultValueConverter() : IValueConverter
 
         var actualType = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
-        foreach (var strategy in _strategies)
+        for (var i = 0; i < Strategies.Length; i++)
         {
+            var strategy = Strategies[i];
             if (strategy.CanConvert(actualType))
             {
                 return strategy.Convert(input, actualType);

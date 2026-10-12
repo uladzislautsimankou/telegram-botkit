@@ -10,48 +10,43 @@ namespace Telegram.BotKit.Messages.Routing;
 /// </summary>
 internal sealed class MessageRoutingMiddleware(
     MessageHandlerRegistry registry,
-    IServiceProvider serviceProvider
-    ) : IMessageMiddleware
+    IServiceProvider serviceProvider) : IMessageMiddleware
 {
-    public async Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public ValueTask InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         IMessageHandler? matched = null;
 
         // find a handler bound specifically to the current user state
         if (!string.IsNullOrWhiteSpace(context.UserState))
         {
-            var stateHandlerTypes = registry.GetHandlerTypesForState(context.UserState.Trim());
-            for (var i = 0; i < stateHandlerTypes.Count; i++)
-            {
-                var handler = (IMessageHandler)serviceProvider.GetRequiredService(stateHandlerTypes[i]);
-                if (handler.CanHandle(context))
-                {
-                    matched = handler;
-                    break;
-                }
-            }
+            matched = FindMatch(registry.GetHandlerTypesForState(context.UserState.Trim()), context);
         }
 
-        // if no state-specific handler matches or no state is active, look for a global handler
+        // fallback to global state-agnostic handlers when no state-specific handler matched
+        matched ??= FindMatch(registry.GetGlobalHandlerTypes(), context);
+
         if (matched is null)
         {
-            var globalHandlerTypes = registry.GetGlobalHandlerTypes();
-            for (var i = 0; i < globalHandlerTypes.Count; i++)
+            return ValueTask.CompletedTask;
+        }
+
+        context.MatchedHandler = matched;
+        context.MatchedMessageMetadata = new MessageMetadata(matched.GetType(), matched);
+
+        return next();
+    }
+
+    private IMessageHandler? FindMatch(ReadOnlySpan<Type> handlerTypes, MessageContext context)
+    {
+        for (var i = 0; i < handlerTypes.Length; i++)
+        {
+            var handler = (IMessageHandler)serviceProvider.GetRequiredService(handlerTypes[i]);
+            if (handler.CanHandle(context))
             {
-                var handler = (IMessageHandler)serviceProvider.GetRequiredService(globalHandlerTypes[i]);
-                if (handler.CanHandle(context))
-                {
-                    matched = handler;
-                    break;
-                }
+                return handler;
             }
         }
 
-        if (matched is not null)
-        {
-            context.MatchedHandler = matched;
-            context.MatchedMessageMetadata = new MessageMetadata(matched.GetType(), matched);
-            await next();
-        }
+        return null;
     }
 }

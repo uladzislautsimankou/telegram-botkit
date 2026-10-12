@@ -15,5 +15,5 @@ public interface IInlineQueryMiddleware
     /// <param name="next">The delegate representing the next middleware in the pipeline.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the execution of the middleware.</returns>
-    Task InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default);
+    ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default);
 }

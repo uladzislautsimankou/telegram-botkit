@@ -1,20 +1,16 @@
-﻿using System.Text;
+﻿using System.Buffers;
+using System.Runtime.CompilerServices;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Helpers;
 
 internal static class ArgumentParser
 {
+    private const int StackallocTokenThreshold = 128;
+
     /// <summary>
-    /// Parses a raw argument string into a list of individual arguments while handling quotations,
-    /// escape sequences, and key-value bindings.
+    /// Parses a raw argument string into individual argument strings handling quotes, escapes, and whitespace in a single pass.
     /// </summary>
-    /// <remarks>
-    /// Supported formats include plain positional tokens such as value,
-    /// standard named parameters such as key=value,
-    /// quoted positional tokens with spaces such as "value with spaces" or «value with spaces»,
-    /// and quoted named parameters such as key="value with spaces".
-    /// </remarks>
     /// <param name="rawArgs">The raw input argument string provided by the user.</param>
     /// <returns>A list of parsed argument strings.</returns>
     /// <exception cref="InputParsingException">Thrown when an unclosed quotation mark is detected.</exception>
@@ -24,75 +20,141 @@ internal static class ArgumentParser
             return [];
 
         var results = new List<string>();
-        var current = new StringBuilder(rawArgs.Length);
-        var inQuotes = false;
-        var isEscaped = false;
-        var hasToken = false;
+        var span = rawArgs.AsSpan();
+        var i = 0;
 
-        for (var i = 0; i < rawArgs.Length; i++)
+        while (i < span.Length)
         {
-            var c = rawArgs[i];
-
-            // normalize typographical and mobile quotation marks to standard double quotes
-            if (c is '«' or '»' or '“' or '”' or '„')
-                c = '"';
-
-            // handle escaped characters such as escaped quotes or backslashes
-            if (isEscaped)
+            // skip whitespace between tokens
+            while (i < span.Length && char.IsWhiteSpace(span[i]))
             {
-                current.Append(c);
-                isEscaped = false;
-                hasToken = true;
-                continue;
+                i++;
             }
 
-            if (c == '\\')
-            {
-                isEscaped = true;
-                continue;
-            }
+            if (i >= span.Length)
+                break;
 
-            // toggle quoted string state without appending the quote delimiter itself
-            if (c == '"')
-            {
-                inQuotes = !inQuotes;
-                hasToken = true;
-                continue;
-            }
+            var tokenStart = i;
+            var isComplex = false;
 
-            // word delimiter outside of quotation marks
-            if (char.IsWhiteSpace(c) && !inQuotes)
+            // optimistic fast scanning: advance until delimiter or special character
+            while (i < span.Length)
             {
-                if (hasToken)
+                var c = span[i];
+
+                if (IsSpecial(c))
                 {
-                    results.Add(current.ToString());
-                    current.Clear();
-                    hasToken = false;
+                    isComplex = true;
+                    break;
                 }
+
+                if (char.IsWhiteSpace(c))
+                {
+                    break;
+                }
+
+                i++;
+            }
+
+            // fast path: pure argument completed without quotes or escapes
+            if (!isComplex)
+            {
+                results.Add(rawArgs[tokenStart..i]);
                 continue;
             }
 
-            current.Append(c);
-            hasToken = true;
-        }
-
-        // handle trailing backslash if present at the end of input
-        if (isEscaped)
-        {
-            current.Append('\\');
-            hasToken = true;
-        }
-
-        if (inQuotes)
-        {
-            throw new InputParsingException(rawArgs, "Unclosed quotation mark detected in arguments.");
-        }
-
-        if (hasToken)
-        {
-            results.Add(current.ToString());
+            // complex path: switch to buffer and continue from the current character in the same pass
+            results.Add(ParseComplexToken(rawArgs, span, tokenStart, ref i));
         }
 
         return results;
     }
+
+    private static string ParseComplexToken(string rawArgs, ReadOnlySpan<char> span, int tokenStart, ref int i)
+    {
+        var maxTokenLength = span.Length - tokenStart;
+        char[]? rented = null;
+        var buffer = maxTokenLength <= StackallocTokenThreshold
+            ? stackalloc char[maxTokenLength]
+            : (rented = ArrayPool<char>.Shared.Rent(maxTokenLength));
+
+        try
+        {
+            var bufferIndex = 0;
+
+            // copy prefix scanned before hitting the first special character
+            var prefixLength = i - tokenStart;
+            if (prefixLength > 0)
+            {
+                span.Slice(tokenStart, prefixLength).CopyTo(buffer);
+                bufferIndex = prefixLength;
+            }
+
+            var inQuotes = false;
+            var isEscaped = false;
+
+            while (i < span.Length)
+            {
+                var c = span[i++];
+
+                // normalize typographical quotes
+                if (IsTypographicQuote(c))
+                    c = '"';
+
+                if (isEscaped)
+                {
+                    buffer[bufferIndex++] = c;
+                    isEscaped = false;
+                    continue;
+                }
+
+                if (c == '\\')
+                {
+                    isEscaped = true;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (char.IsWhiteSpace(c) && !inQuotes)
+                {
+                    // token delimiter reached
+                    break;
+                }
+
+                buffer[bufferIndex++] = c;
+            }
+
+            if (isEscaped)
+            {
+                buffer[bufferIndex++] = '\\';
+            }
+
+            if (inQuotes)
+            {
+                throw new InputParsingException(rawArgs, "Unclosed quotation mark detected in arguments.");
+            }
+
+            return new string(buffer[..bufferIndex]);
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                ArrayPool<char>.Shared.Return(rented);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsSpecial(char c) =>
+        c is '"' or '\\' || IsTypographicQuote(c);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsTypographicQuote(char c) =>
+        c is '«' or '»' or '“' or '”' or '„';
 }

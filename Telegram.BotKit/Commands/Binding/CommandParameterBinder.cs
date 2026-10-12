@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Telegram.BotKit.Commands.Attributes;
 using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Shared.Binding;
@@ -10,19 +10,19 @@ namespace Telegram.BotKit.Commands.Binding;
 /// Command parameter binder responsible for mapping incoming command raw arguments to strongly-typed models.
 /// </summary>
 internal sealed class CommandParameterBinder(
-    IEnumerable<IValueConverter> converters
-    ) : ParameterBinderBase<CommandParamAttribute> (converters), ICommandParameterBinder
+    IEnumerable<IValueConverter> converters) : ParameterBinderBase<CommandParamAttribute>(converters), ICommandParameterBinder
 {
     public TParams Bind<TParams>(CommandContext context) where TParams : class, new() =>
-         BindInternal<TParams>(context.RawParams);
+        BindInternal<TParams>(context.RawParams);
 
-    protected override ParamMetadata MapAttribute(PropertyInfo prop, CommandParamAttribute attr) => 
-        new ParamMetadata(
+    protected override ParamMetadata MapAttribute(PropertyInfo prop, CommandParamAttribute attr) =>
+        new(
             PropertyInfo: prop,
             Name: attr.Name,
             Position: attr.Position,
             Required: attr.Required,
-            PropertyType: prop.PropertyType
+            PropertyType: prop.PropertyType,
+            Converter: null!, // assigned during BuildMetadata
+            Setter: PropertySetterCompiler.Compile(prop)
         );
-
 }

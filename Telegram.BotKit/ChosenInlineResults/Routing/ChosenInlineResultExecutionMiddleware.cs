@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.ChosenInlineResults.Abstractions;
+using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
 using Telegram.BotKit.Shared;
 
@@ -9,11 +9,13 @@ namespace Telegram.BotKit.ChosenInlineResults.Routing;
 /// </summary>
 internal sealed class ChosenInlineResultExecutionMiddleware : IChosenInlineResultMiddleware
 {
-    public async Task InvokeAsync(ChosenInlineResultContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public ValueTask InvokeAsync(ChosenInlineResultContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        if (context.MatchedHandler is not null)
+        if (context.MatchedHandler is null)
         {
-            await context.MatchedHandler.HandleAsync(context, cancellationToken);
+            return ValueTask.CompletedTask;
         }
+
+        return new ValueTask(context.MatchedHandler.HandleAsync(context, cancellationToken));
     }
 }

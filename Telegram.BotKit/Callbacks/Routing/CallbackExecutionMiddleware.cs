@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Callbacks.Abstractions;
+using Telegram.BotKit.Callbacks.Abstractions;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Shared;
 
@@ -7,13 +7,19 @@ namespace Telegram.BotKit.Callbacks.Routing;
 /// <summary>
 /// Execution middleware responsible for running the matched callback handler.
 /// </summary>
-internal sealed class CallbackExecutionMiddleware : ICallbackMiddleware
+internal sealed class CallbackExecutionMiddleware(IServiceProvider serviceProvider) : ICallbackMiddleware
 {
-    public async Task InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public ValueTask InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        if (context.MatchedInvoker is not null)
+        if (context is not { MatchedRegistration: not null, MatchedCallbackMetadata: not null })
         {
-            await context.MatchedInvoker.InvokeAsync(context, cancellationToken);
+            return ValueTask.CompletedTask;
         }
+
+        return new ValueTask(context.MatchedRegistration.Invoker(
+            context.MatchedCallbackMetadata.HandlerInstance,
+            context,
+            serviceProvider,
+            cancellationToken));
     }
 }

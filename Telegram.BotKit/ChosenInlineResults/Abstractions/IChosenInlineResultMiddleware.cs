@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.ChosenInlineResults.Models;
+using Telegram.BotKit.ChosenInlineResults.Models;
 using Telegram.BotKit.Shared;
 
 namespace Telegram.BotKit.ChosenInlineResults.Abstractions;
@@ -11,5 +11,9 @@ public interface IChosenInlineResultMiddleware
     /// <summary>
     /// Executes the middleware logic.
     /// </summary>
-    Task InvokeAsync(ChosenInlineResultContext context, NextDelegate next, CancellationToken cancellationToken = default);
+    /// <param name="context">The context associated with the current chosen inline result.</param>
+    /// <param name="next">The delegate representing the next middleware in the pipeline.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the execution of the middleware.</returns>
+    ValueTask InvokeAsync(ChosenInlineResultContext context, NextDelegate next, CancellationToken cancellationToken = default);
 }

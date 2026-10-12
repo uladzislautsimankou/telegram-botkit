@@ -9,7 +9,7 @@ public interface IMessageHandler
 {
     /// <summary>
     /// Gets the user state required to trigger this handler.
-    /// If this returns <see langword="null"/>, the handler is treated as global and is active when the user has no state.
+    /// If null, the handler is treated as global and active when the user has no state, or as a fallback if no state-specific handler matched.
     /// </summary>
     static virtual string? RequiredState => null;
 
@@ -17,7 +17,7 @@ public interface IMessageHandler
     /// Determines whether the incoming message context satisfies the handler's execution criteria.
     /// </summary>
     /// <param name="context">The context containing the message and metadata.</param>
-    /// <returns><see langword="true"/> if this handler can process the message; otherwise, <see langword="false"/>.</returns>
+    /// <returns>True if this handler can process the message; otherwise, false.</returns>
     /// <example>
     /// <code>
     /// public bool CanHandle(MessageContext context) =>
@@ -32,5 +32,5 @@ public interface IMessageHandler
     /// </summary>
     /// <param name="context">The context containing the message and metadata.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    Task HandleAsync(MessageContext context, CancellationToken cancellationToken);
+    Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default);
 }

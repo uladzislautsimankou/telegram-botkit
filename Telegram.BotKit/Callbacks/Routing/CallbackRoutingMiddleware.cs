@@ -1,6 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
 using Telegram.BotKit.Callbacks.Abstractions;
-using Telegram.BotKit.Callbacks.Invocation;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Shared;
 using Telegram.BotKit.Shared.Exceptions;
@@ -12,20 +10,19 @@ namespace Telegram.BotKit.Callbacks.Routing;
 /// </summary>
 internal sealed class CallbackRoutingMiddleware(
     CallbackHandlerRegistry registry,
-    IServiceProvider serviceProvider
-    ) : ICallbackMiddleware
+    IServiceProvider serviceProvider) : ICallbackMiddleware
 {
-    public async Task InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public ValueTask InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        if (!registry.TryGetInvokerType(context.Key, out var invokerType))
+        if (!registry.TryGetRegistration(context.Key, out var registration))
         {
             throw new RouteNotFoundException(context.Key);
         }
 
-        var invoker = (ICallbackHandlerInvoker)serviceProvider.GetRequiredService(invokerType!);
-        context.MatchedInvoker = invoker;
-        context.MatchedCallbackMetadata = new CallbackMetadata(invoker.HandlerType, invoker.HandlerInstance);
+        var handlerInstance = registration!.Factory(serviceProvider);
+        context.MatchedRegistration = registration;
+        context.MatchedCallbackMetadata = new CallbackMetadata(registration.HandlerType, handlerInstance);
 
-        await next();
+        return next();
     }
 }

@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Callbacks.Models;
+using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Shared;
 
 namespace Telegram.BotKit.Callbacks.Abstractions;
@@ -16,5 +16,5 @@ public interface ICallbackMiddleware
     /// <param name="next">The delegate representing the next middleware in the pipeline.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the execution of the middleware.</returns>
-    Task InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default);
+    ValueTask InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default);
 }

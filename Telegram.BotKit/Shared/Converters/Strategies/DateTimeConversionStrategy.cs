@@ -8,23 +8,27 @@ internal sealed class DateTimeConversionStrategy : IConversionStrategy
 
     public object Convert(string input, Type targetType)
     {
-        // composite parsing for date and time combinations separated by 'T' or space
-        var parts = input.Split(['T', ' '], 2, StringSplitOptions.RemoveEmptyEntries);
+        var span = input.AsSpan().Trim();
+        var separatorIndex = span.IndexOfAny('T', ' ');
 
-        if (parts.Length == 2 &&
-            DateOnlyConversionStrategy.TryParse(parts[0], out var date) &&
-            TimeOnlyConversionStrategy.TryParse(parts[1], out var time))
+        if (separatorIndex > 0)
         {
-            return date.ToDateTime(time);
-        }
+            var dateSpan = span[..separatorIndex];
+            var timeSpan = span[(separatorIndex + 1)..];
 
-        if (parts.Length == 1 && DateOnlyConversionStrategy.TryParse(parts[0], out var dateOnly))
+            if (DateOnlyConversionStrategy.TryParse(dateSpan, out var date) &&
+                TimeOnlyConversionStrategy.TryParse(timeSpan, out var time))
+            {
+                return date.ToDateTime(time);
+            }
+        }
+        else if (DateOnlyConversionStrategy.TryParse(span, out var dateOnly))
         {
             return dateOnly.ToDateTime(TimeOnly.MinValue);
         }
 
-        // lenient fallback for standard ISO-8601, timezone offsets, and textual months
-        if (DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTime))
+        // fallback for standard iso-8601 strings and textual dates
+        if (DateTime.TryParse(span, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTime))
         {
             return dateTime;
         }

@@ -18,7 +18,7 @@ public sealed record InlineQueryBatch
     /// <param name="cacheTime">The maximum amount of time in seconds that the results may be cached on Telegram servers.</param>
     /// <param name="nextOffset">The offset value identifying where the next page of results should begin.</param>
     public InlineQueryBatch(
-        IEnumerable<InlineQueryResult> results,
+        IReadOnlyList<InlineQueryResult> results,
         InlineQueryResultsButton? button = null,
         bool isPersonal = false,
         int? cacheTime = null,
@@ -34,7 +34,7 @@ public sealed record InlineQueryBatch
     /// <summary>
     /// Gets the aggregated collection of inline results accumulated from all matched inline handlers.
     /// </summary>
-    public IEnumerable<InlineQueryResult> Results { get; init; } = Enumerable.Empty<InlineQueryResult>();
+    public IReadOnlyList<InlineQueryResult> Results { get; init; } = [];
 
     /// <summary>
     /// Gets or sets a value indicating whether the search results are personal and cached on the server side 

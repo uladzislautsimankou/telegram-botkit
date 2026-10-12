@@ -1,7 +1,13 @@
-﻿namespace Telegram.BotKit.Shared.Converters.Strategies;
+﻿using System.Collections.Concurrent;
+
+namespace Telegram.BotKit.Shared.Converters.Strategies;
 
 internal sealed class EnumConversionStrategy : IConversionStrategy
 {
+    private sealed record EnumMetadata(bool IsFlags, ulong Bitmask);
+
+    private static readonly ConcurrentDictionary<Type, EnumMetadata> MetadataCache = new();
+
     public bool CanConvert(Type targetType) => targetType.IsEnum;
 
     public object Convert(string input, Type targetType)
@@ -11,8 +17,23 @@ internal sealed class EnumConversionStrategy : IConversionStrategy
             throw new FormatException($"Value '{input}' is not a valid member of enum '{targetType.Name}'.");
         }
 
-        // standard enums require a strictly defined member to reject phantom numeric casts (e.g., "999")
-        if (!targetType.IsDefined(typeof(FlagsAttribute), inherit: false))
+        var metadata = MetadataCache.GetOrAdd(targetType, static type =>
+        {
+            var isFlags = type.IsDefined(typeof(FlagsAttribute), inherit: false);
+            ulong mask = 0;
+
+            if (isFlags)
+            {
+                foreach (var val in Enum.GetValues(type))
+                {
+                    mask |= ToUInt64(val);
+                }
+            }
+
+            return new EnumMetadata(isFlags, mask);
+        });
+
+        if (!metadata.IsFlags)
         {
             if (!Enum.IsDefined(targetType, enumResult))
             {
@@ -22,16 +43,8 @@ internal sealed class EnumConversionStrategy : IConversionStrategy
             return enumResult;
         }
 
-        // flags enums allow bitwise combinations
-        // validate against the aggregate bitmask of declared values
-        ulong mask = 0;
-        foreach (var val in Enum.GetValues(targetType))
-        {
-            mask |= ToUInt64(val);
-        }
-
-        ulong bits = ToUInt64(enumResult);
-        if ((bits & ~mask) != 0)
+        var bits = ToUInt64(enumResult);
+        if ((bits & ~metadata.Bitmask) != 0)
         {
             throw new FormatException($"Value '{input}' is not a valid member or combination of flags for enum '{targetType.Name}'.");
         }
@@ -39,7 +52,6 @@ internal sealed class EnumConversionStrategy : IConversionStrategy
         return enumResult;
     }
 
-    // prevents sign-extension when widening signed underlying integer types to ulong
     private static ulong ToUInt64(object val) => Type.GetTypeCode(val.GetType()) switch
     {
         TypeCode.SByte => (byte)(sbyte)val,

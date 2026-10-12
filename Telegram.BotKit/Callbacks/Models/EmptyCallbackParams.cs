@@ -1,4 +1,4 @@
-﻿
+
 namespace Telegram.BotKit.Callbacks.Models;
 
 /// <summary>

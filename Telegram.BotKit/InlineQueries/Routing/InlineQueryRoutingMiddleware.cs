@@ -7,14 +7,13 @@ using Telegram.BotKit.Shared.Exceptions;
 namespace Telegram.BotKit.InlineQueries.Routing;
 
 /// <summary>
-/// Routing middleware responsible for identifying and executing matching inline query handlers.
+/// Routing middleware responsible for identifying and executing matching inline query handlers in a deterministic order.
 /// </summary>
 internal sealed class InlineQueryRoutingMiddleware(
     IEnumerable<IInlineQueryHandler> handlers,
-    ILogger<InlineQueryRoutingMiddleware> logger
-    ) : IInlineQueryMiddleware
+    ILogger<InlineQueryRoutingMiddleware> logger) : IInlineQueryMiddleware
 {
-    public async Task InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public async ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         var activeHandlers = new List<IInlineQueryHandler>();
 
@@ -32,7 +31,7 @@ internal sealed class InlineQueryRoutingMiddleware(
             return;
         }
 
-        // if only one handler matched, invoke it directly to avoid task allocation overhead
+        // execute directly without array allocation when only one handler matched
         if (activeHandlers.Count is 1)
         {
             var handler = activeHandlers[0];
@@ -44,22 +43,56 @@ internal sealed class InlineQueryRoutingMiddleware(
             }
             catch (Exception ex)
             {
+                logger.LogError(ex, "Inline query handler '{HandlerName}' failed during execution", handler.GetType().Name);
                 context.AddException(new HandlerFailedException(handler.GetType(), ex));
             }
-        }
-        else
-        {
-            var tasks = new Task[activeHandlers.Count];
-            for (var i = 0; i < activeHandlers.Count; i++)
-            {
-                var handler = activeHandlers[i];
-                tasks[i] = InvokeHandlerSafeAsync(context, handler, cancellationToken);
-            }
 
-            await Task.WhenAll(tasks);
+            await next();
+            return;
+        }
+
+        // execute all handlers concurrently
+        var tasks = new Task<(IInlineQueryHandler Handler, InlineQueryBatch? Batch, Exception? Exception)>[activeHandlers.Count];
+        for (var i = 0; i < activeHandlers.Count; i++)
+        {
+            tasks[i] = ExecuteHandlerAsync(activeHandlers[i], context, cancellationToken);
+        }
+
+        var results = await Task.WhenAll(tasks);
+
+        // apply batches sequentially to guarantee deterministic result ordering
+        for (var i = 0; i < results.Length; i++)
+        {
+            var (handler, batch, exception) = results[i];
+
+            if (exception is not null)
+            {
+                logger.LogError(exception, "Inline query handler '{HandlerName}' failed during execution", handler.GetType().Name);
+                context.AddException(new HandlerFailedException(handler.GetType(), exception));
+            }
+            else
+            {
+                ApplyBatch(context, batch, handler.GetType().Name);
+            }
         }
 
         await next();
+    }
+
+    private static async Task<(IInlineQueryHandler Handler, InlineQueryBatch? Batch, Exception? Exception)> ExecuteHandlerAsync(
+        IInlineQueryHandler handler,
+        InlineQueryContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var batch = await handler.HandleAsync(context, cancellationToken);
+            return (handler, batch, null);
+        }
+        catch (Exception ex)
+        {
+            return (handler, null, ex);
+        }
     }
 
     private void ApplyBatch(InlineQueryContext context, InlineQueryBatch? batch, string handlerName)
@@ -85,19 +118,6 @@ internal sealed class InlineQueryRoutingMiddleware(
             logger.LogWarning(
                 "Conflict: Multiple inline query handlers provided a button. Overwriting previous button with the one from '{HandlerName}'",
                 handlerName);
-        }
-    }
-
-    private async Task InvokeHandlerSafeAsync(InlineQueryContext context, IInlineQueryHandler handler, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var batch = await handler.HandleAsync(context, cancellationToken);
-            ApplyBatch(context, batch, handler.GetType().Name);
-        }
-        catch (Exception ex)
-        {
-            context.AddException(new HandlerFailedException(handler.GetType(), ex));
         }
     }
 }

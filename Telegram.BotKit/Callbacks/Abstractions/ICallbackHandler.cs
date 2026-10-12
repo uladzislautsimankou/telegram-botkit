@@ -1,6 +1,6 @@
-﻿using Telegram.BotKit.Callbacks.Models;
+using Telegram.BotKit.Callbacks.Models;
 
-namespace Telegram.BotKit.Abstractions;
+namespace Telegram.BotKit.Callbacks.Abstractions;
 
 /// <summary>
 /// Defines a handler for a specific callback query (inline button interaction) with strongly typed parameters.

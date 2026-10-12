@@ -6,6 +6,11 @@
 public interface IValueConverter
 {
     /// <summary>
+    /// Determines whether the converter supports the specified target type.
+    /// </summary>
+    bool CanConvert(Type targetType);
+
+    /// <summary>
     /// Converts input within the given context into the target type.
     /// </summary>
     /// <exception cref="FormatException">Thrown when the input format is invalid.</exception>
@@ -15,7 +20,6 @@ public interface IValueConverter
     /// <summary>
     /// Attempts to convert input within the given context into the target type without throwing exceptions.
     /// </summary>
-    /// <returns><c>true</c> if the conversion succeeded; otherwise, <c>false</c>.</returns>
     bool TryConvert(ValueConversionContext context, out object? result);
 
     /// <summary>
