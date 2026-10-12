@@ -16,54 +16,51 @@ internal sealed class WebhookStartupService(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        var botOptions = options.Value;
+
         try
         {
-            var me = await bot.GetMe(cancellationToken: cancellationToken);
-            botInfo.SetState(me.Username, me.Id, me.FirstName, me.LastName);
+            await bot.InitializeIdentityAsync(botInfo, logger, cancellationToken);
 
-            logger.LogInformation("Bot identified: @{Username} (ID: {Id})", me.Username, me.Id);
-            logger.LogInformation("Setting up Webhook: {Url}", options.Value.WebhookUrl);
-
-            // Null: Keep previous settings. Array.Empty: Reset to Telegram defaults.
-            var allowedUpdates = options.Value.AllowedUpdates is not null
-                ? options.Value.AllowedUpdates.Select(x => Enum.Parse<UpdateType>(x, true)).ToArray()
-                : null;
+            logger.LogInformation("Setting up Webhook: {Url}", botOptions.WebhookUrl);
 
             InputFileStream? certificateInput = null;
             FileStream? certStream = null;
 
-            if (!string.IsNullOrWhiteSpace(options.Value.CertificatePath))
+            if (!string.IsNullOrWhiteSpace(botOptions.CertificatePath))
             {
-                if (File.Exists(options.Value.CertificatePath))
+                if (File.Exists(botOptions.CertificatePath))
                 {
-                    certStream = File.OpenRead(options.Value.CertificatePath);
-                    certificateInput = InputFile.FromStream(certStream, Path.GetFileName(options.Value.CertificatePath));
-                    logger.LogInformation("Using self-signed certificate: {Path}", options.Value.CertificatePath);
+                    certStream = File.OpenRead(botOptions.CertificatePath);
+                    certificateInput = InputFile.FromStream(certStream, Path.GetFileName(botOptions.CertificatePath));
+                    logger.LogInformation("Using self-signed certificate: {Path}", botOptions.CertificatePath);
                 }
                 else
                 {
-                    logger.LogWarning("Certificate file not found at: {Path}. Webhook will be set without certificate.", options.Value.CertificatePath);
+                    logger.LogWarning("Certificate file not found at: {Path}. Webhook will be set without certificate.", botOptions.CertificatePath);
                 }
             }
 
             try
             {
                 await bot.SetWebhook(
-                    url: options.Value.WebhookUrl,
+                    url: botOptions.WebhookUrl,
                     certificate: certificateInput,
-                    ipAddress: options.Value.IpAddress,
-                    maxConnections: options.Value.MaxConnections,
-                    allowedUpdates: allowedUpdates,
-                    dropPendingUpdates: options.Value.DropPendingUpdates,
-                    secretToken: options.Value.SecretToken,
+                    ipAddress: botOptions.IpAddress,
+                    maxConnections: botOptions.MaxConnections,
+                    allowedUpdates: botOptions.ParsedAllowedUpdates,
+                    dropPendingUpdates: botOptions.DropPendingUpdates,
+                    secretToken: botOptions.SecretToken,
                     cancellationToken: cancellationToken);
 
-                logger.LogInformation("✅ Webhook set successfully.");
+                logger.LogInformation("Webhook registered successfully");
             }
             finally
             {
                 if (certStream is not null)
+                {
                     await certStream.DisposeAsync();
+                }
             }
         }
         catch (Exception ex)
@@ -77,7 +74,7 @@ internal sealed class WebhookStartupService(
     {
         logger.LogInformation("Removing Webhook...");
 
-        // even if the webhook fails to delete, it is not critical
+        // deletion failure on shutdown is not critical
         try
         {
             await bot.DeleteWebhook(cancellationToken: cancellationToken);

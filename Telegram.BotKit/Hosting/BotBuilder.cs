@@ -6,167 +6,141 @@ using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Hosting.Background;
 using Telegram.BotKit.Hosting.Webhook;
+using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Hosting;
 
 /// <summary>
-/// A builder for configuring the Telegram bot application, services, and middleware.
-/// Automatically handles the choice between Polling and Webhook modes based on configuration.
+/// Configures host services, pipelines, and runtime modes for the Telegram bot.
 /// </summary>
 public sealed class BotBuilder
 {
-    private readonly HostApplicationBuilder? _hostBuilder; // Used for Polling mode
-    private readonly WebApplicationBuilder? _webBuilder;   // Used for Webhook mode
+    // host instance for polling mode
+    private readonly HostApplicationBuilder? _hostBuilder;
+
+    // host instance for webhook mode
+    private readonly WebApplicationBuilder? _webBuilder;
 
     private readonly BotMode _mode;
 
-    /// <summary>
-    /// Gets the service collection to register application services.
-    /// </summary>
     public IServiceCollection Services => _hostBuilder is not null ? _hostBuilder.Services : _webBuilder!.Services;
-
-    /// <summary>
-    /// Gets the configuration manager for accessing application settings (appsettings.json, environment variables, etc.).
-    /// </summary>
     public IConfigurationManager Configuration => _hostBuilder is not null ? _hostBuilder.Configuration : _webBuilder!.Configuration;
-
-    /// <summary>
-    /// Gets information about the hosting environment (e.g., Development or Production).
-    /// </summary>
     public IHostEnvironment Environment => _hostBuilder is not null ? _hostBuilder.Environment : _webBuilder!.Environment;
-
-    /// <summary>
-    /// Gets the logging builder for configuring logging providers and filters.
-    /// </summary>
     public ILoggingBuilder Logging => _hostBuilder is not null ? _hostBuilder.Logging : _webBuilder!.Logging;
-
-    /// <summary>
-    /// Gets the metrics builder for configuring OpenTelemetry and other metrics.
-    /// </summary>
     public IMetricsBuilder Metrics => _hostBuilder is not null ? _hostBuilder.Metrics : _webBuilder!.Metrics;
-
-    /// <summary>
-    /// Gets the underlying <see cref="HostApplicationBuilder"/> if running in Polling mode.
-    /// Returns null if running in Webhook mode.
-    /// </summary>
     public HostApplicationBuilder? HostBuilder => _hostBuilder;
-
-    /// <summary>
-    /// Gets the underlying <see cref="WebApplicationBuilder"/> if running in Webhook mode.
-    /// Returns null if running in Polling mode.
-    /// Use this to configure Kestrel, CORS, or other web-specific settings.
-    /// </summary>
     public WebApplicationBuilder? WebApplicationBuilder => _webBuilder;
 
     internal BotBuilder(string[] args)
     {
-        // Determine the environment early to load the correct configuration file.
-        var envName =
-            System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+        var envName = System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
             ?? System.Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
             ?? Environments.Development;
 
-        // Build a temporary configuration to read the 'TelegramBot' settings before creating the actual host.
+        // preliminary configuration pass strictly for mode resolution
         var preConfig = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddJsonFile($"appsettings.{envName}.json", optional: true, reloadOnChange: true)
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+            .AddJsonFile($"appsettings.{envName}.json", optional: true, reloadOnChange: false)
             .AddEnvironmentVariables()
+            .AddCommandLine(args)
             .Build();
 
-        var botSettings = preConfig.GetSection("TelegramBot").Get<TelegramBotOptions>();
+        var botSettings = preConfig.GetSection(TelegramBotOptions.SectionName).Get<TelegramBotOptions>();
+        var rawMode = preConfig.GetSection(TelegramBotOptions.SectionName)["Mode"];
 
-        _mode = botSettings?.Mode ?? BotMode.Polling;
-
-        if (_mode == BotMode.Webhook)
+        if (!string.IsNullOrWhiteSpace(rawMode))
         {
-            // Initialize WebApplicationBuilder for Webhook mode (requires Kestrel and Controllers).
+            if (!Enum.TryParse<BotMode>(rawMode, ignoreCase: true, out var parsedMode))
+            {
+                throw new BotStartupException($"Invalid TelegramBot:Mode '{rawMode}'. Expected 'Polling' or 'Webhook'.");
+            }
+
+            _mode = parsedMode;
+        }
+        else
+        {
+            _mode = BotMode.Polling;
+        }
+
+        if (_mode is BotMode.Webhook)
+        {
             var webOptions = new WebApplicationOptions
             {
                 Args = args,
                 EnvironmentName = envName
             };
-
             _webBuilder = WebApplication.CreateBuilder(webOptions);
+            _webBuilder.Services.AddHostedService<WebhookStartupService>();
         }
         else
         {
-            // Initialize HostApplicationBuilder for Polling mode (lightweight, no web server).
             var hostOptions = new HostApplicationBuilderSettings
             {
                 Args = args,
                 EnvironmentName = envName
             };
-
             _hostBuilder = Host.CreateApplicationBuilder(hostOptions);
+            _hostBuilder.Services.AddHostedService<PollingService>();
         }
 
-        // Register the core framework services.
         Services.AddTelegramBotFramework(Configuration);
-
-        // Register the appropriate startup service based on the selected mode.
-        if (_mode == BotMode.Webhook)
-        {
-            Services.AddHostedService<WebhookStartupService>();
-        }
-        else
-        {
-            Services.AddHostedService<PollingService>();
-        }
     }
 
     /// <summary>
-    /// Builds the <see cref="BotApplication"/>.
+    /// Builds the configured application instance.
     /// </summary>
-    /// <returns>A configured instance of <see cref="BotApplication"/>.</returns>
     public BotApplication Build()
     {
-        IHost host;
-
-        if (_mode == BotMode.Webhook)
+        if (_mode is not BotMode.Webhook)
         {
-            var app = _webBuilder!.Build();
-            var opts = app.Services.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
+            return new BotApplication(_hostBuilder!.Build());
+        }
 
-            // Dynamically extract the path from the full WebhookUrl configuration
-            var routePath = "/api/bot";
-            if (Uri.TryCreate(opts.WebhookUrl, UriKind.Absolute, out var webhookUri))
+        var app = _webBuilder!.Build();
+        var options = app.Services.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
+
+        var routePath = "/api/bot";
+        if (Uri.TryCreate(options.WebhookUrl, UriKind.Absolute, out var webhookUri) && !string.IsNullOrWhiteSpace(webhookUri.AbsolutePath))
+        {
+            routePath = webhookUri.AbsolutePath;
+        }
+
+        app.MapPost(routePath, async (
+            HttpContext context,
+            Update update,
+            IUpdateHandler updateHandler,
+            ITelegramBotClient botClient,
+            CancellationToken cancellationToken) =>
+        {
+            if (!string.IsNullOrEmpty(options.SecretToken))
             {
-                routePath = webhookUri.AbsolutePath;
+                if (!context.Request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var tokenHeader)
+                    || !IsSecretTokenValid(tokenHeader.ToString(), options.SecretToken))
+                {
+                    return Results.Unauthorized();
+                }
             }
 
-            app.MapPost(routePath, async (
-                HttpContext context,
-                Update update,
-                IUpdateHandler updateHandler,
-                ITelegramBotClient botClient,
-                CancellationToken cancellationToken) =>
-            {
-                if (!string.IsNullOrEmpty(opts.SecretToken))
-                {
-                    if (!context.Request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var headerToken)
-                        || headerToken != opts.SecretToken)
-                    {
-                        return Results.Unauthorized();
-                    }
-                }
+            await updateHandler.HandleUpdateAsync(botClient, update, cancellationToken);
+            return Results.Ok();
+        });
 
-                await updateHandler.HandleUpdateAsync(botClient, update, cancellationToken);
-                return Results.Ok();
-            });
+        return new BotApplication(app);
+    }
 
-            host = app;
-        }
-        else
-        {
-            host = _hostBuilder!.Build();
-        }
+    private static bool IsSecretTokenValid(string providedToken, string expectedToken)
+    {
+        var providedBytes = Encoding.UTF8.GetBytes(providedToken);
+        var expectedBytes = Encoding.UTF8.GetBytes(expectedToken);
 
-        return new BotApplication(host);
+        return CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
     }
 }

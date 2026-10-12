@@ -1,67 +1,96 @@
-﻿namespace Telegram.BotKit.Hosting;
+﻿using Telegram.Bot.Types.Enums;
 
-internal record TelegramBotOptions
+namespace Telegram.BotKit.Hosting;
+
+/// <summary>
+/// Configuration options for the Telegram bot host and communication mode.
+/// </summary>
+internal sealed record TelegramBotOptions
 {
+    private string[]? _allowedUpdates;
+
+    public const string SectionName = "TelegramBot";
+
     /// <summary>
-    /// The unique authentication token for the bot (obtained from @BotFather).
-    /// Required.
+    /// Unique authentication token for the bot obtained from @BotFather.
     /// </summary>
     public string Token { get; set; } = string.Empty;
 
     /// <summary>
-    /// Used to change base URL to your private Bot API server.
-    /// Example: "https://my-telegram-proxy.example.com". Path, query and fragment will be omitted if present.
+    /// Base URL for a private Bot API server. Path, query, and fragment are omitted if present.
     /// </summary>
-    public string? BaseUrl {  get; set; } = null;
+    public string? BaseUrl { get; set; }
 
     /// <summary>
     /// List of update types the bot should receive.
-    /// If null (omitted), Telegram retains the previous settings.
-    /// If empty [], Telegram resets to receive all default update types.
+    /// Passing null retains previous settings; empty array resets to defaults.
     /// </summary>
-    public string[]? AllowedUpdates { get; set; } = null;
+    public string[]? AllowedUpdates
+    {
+        get => _allowedUpdates;
+        set
+        {
+            _allowedUpdates = value;
+            ParsedAllowedUpdates = ParseUpdates(value);
+        }
+    }
 
     /// <summary>
-    /// Determines how the bot receives updates: Long Polling or Webhook.
-    /// Default is Polling.
+    /// Strongly-typed update types parsed from <see cref="AllowedUpdates"/>.
+    /// </summary>
+    internal UpdateType[]? ParsedAllowedUpdates { get; private set; }
+
+    /// <summary>
+    /// Receiving mechanism used by the bot: Long Polling or Webhook.
     /// </summary>
     public BotMode Mode { get; set; } = BotMode.Polling;
 
     /// <summary>
-    /// The HTTPS URL where Telegram sends updates.
-    /// Required if Mode is set to <see cref="BotMode.Webhook"/>.
+    /// Target HTTPS URL where Telegram sends updates when running in webhook mode.
     /// </summary>
     public string WebhookUrl { get; set; } = string.Empty;
 
     /// <summary>
-    /// Optional. A secret token to be sent in a header "X-Telegram-Bot-Api-Secret-Token" in every webhook request.
-    /// Highly recommended for security.
+    /// Secret token sent in the X-Telegram-Bot-Api-Secret-Token header with every webhook request.
     /// </summary>
     public string? SecretToken { get; set; }
 
     /// <summary>
-    /// Optional. The fixed IP address which will be used to send webhook requests instead of the IP resolved through DNS.
+    /// Fixed IP address used by Telegram to bypass DNS resolution for webhook requests.
     /// </summary>
     public string? IpAddress { get; set; }
 
     /// <summary>
-    /// Optional. The maximum allowed number of simultaneous HTTPS connections to the webhook for update delivery (1-100).
+    /// Maximum allowed number of simultaneous HTTPS connections for update delivery (1-100).
     /// </summary>
     public int? MaxConnections { get; set; }
 
     /// <summary>
-    /// Optional. Pass True to drop all pending updates.
+    /// Drops all pending Telegram updates upon starting the bot.
     /// </summary>
-    public bool DropPendingUpdates { get; set; } = false;
+    public bool DropPendingUpdates { get; set; }
 
     /// <summary>
-    /// Optional. Path to the public key certificate file (e.g. "cert.pem") if you use a self-signed certificate.
+    /// Path to a self-signed public key certificate file (e.g. cert.pem).
     /// </summary>
     public string? CertificatePath { get; set; }
 
-    /// <summary>
-    /// Gets or sets a list of command names (without leading slashes) that the bot should completely ignore.
-    /// Commands in this list will be skipped immediately, skipping routing and suggestions.
-    /// </summary>
-    public List<string> IgnoredCommands { get; set; } = new();
+    private static UpdateType[]? ParseUpdates(string[]? updates)
+    {
+        if (updates is null)
+        {
+            return null;
+        }
+
+        var result = new List<UpdateType>(updates.Length);
+        foreach (var update in updates)
+        {
+            if (Enum.TryParse<UpdateType>(update, ignoreCase: true, out var parsed))
+            {
+                result.Add(parsed);
+            }
+        }
+
+        return result.ToArray();
+    }
 }

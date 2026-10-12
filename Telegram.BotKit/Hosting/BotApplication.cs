@@ -3,30 +3,22 @@
 namespace Telegram.BotKit.Hosting;
 
 /// <summary>
-/// Represents the configured Telegram bot application.
-/// This class acts as a wrapper around the underlying .NET Host, managing the application's lifetime and execution.
+/// Configured Telegram bot application wrapper around the underlying .NET host.
 /// </summary>
-public sealed class BotApplication
+public sealed class BotApplication(IHost host)
 {
-    private readonly IHost _host;
-
-    internal BotApplication(IHost host) => _host = host;
+    /// <summary>
+    /// Initializes a builder instance with default configurations.
+    /// </summary>
+    public static BotBuilder CreateBuilder(string[] args) => new(args);
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="BotBuilder"/> class with pre-configured defaults.
+    /// Runs the application and blocks the calling thread until the host stops.
     /// </summary>
-    /// <param name="args">The command-line arguments.</param>
-    /// <returns>A new <see cref="BotBuilder"/> instance.</returns>
-    public static BotBuilder CreateBuilder(string[] args) => new BotBuilder(args);
+    public Task RunAsync(CancellationToken cancellationToken = default) => host.RunAsync(cancellationToken);
 
     /// <summary>
-    /// Runs the application and blocks the calling thread until the host is stopped.
+    /// Gets the application dependency injection container.
     /// </summary>
-    /// <returns>A task that represents the application's lifetime.</returns>
-    public async Task RunAsync() => await _host.RunAsync();
-
-    /// <summary>
-    /// Gets the application's service provider, used to resolve dependencies.
-    /// </summary>
-    public IServiceProvider Services => _host.Services;
+    public IServiceProvider Services => host.Services;
 }

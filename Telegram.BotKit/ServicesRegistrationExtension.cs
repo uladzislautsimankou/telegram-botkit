@@ -18,7 +18,7 @@ internal static class ServicesRegistrationExtension
     public static IServiceCollection AddTelegramBotFramework(this IServiceCollection services, IConfiguration configuration)
     {
         // bind and configure telegram bot options
-        services.Configure<TelegramBotOptions>(configuration.GetSection("TelegramBot"));
+        services.Configure<TelegramBotOptions>(configuration.GetSection(TelegramBotOptions.SectionName));
 
         // register the typed telegram bot client with a dedicated HTTP client
         services.AddHttpClient("tg_client")
