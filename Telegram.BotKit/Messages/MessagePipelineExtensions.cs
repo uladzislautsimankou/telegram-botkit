@@ -39,7 +39,7 @@ public sealed class MessagePipelineBuilder(IServiceCollection services)
     public MessagePipelineBuilder AddHandler<THandler>() where THandler : class, IMessageHandler
     {
         var registry = GetOrCreateRegistry();
-        MessageRegistrationHelper.RegisterHandler(Services, registry, typeof(THandler));
+        MessageRegistrationHelper.RegisterHandler<THandler>(Services, registry);
         return this;
     }
 
@@ -139,14 +139,44 @@ public static class MessageServiceCollectionExtensions
 
 internal static class MessageRegistrationHelper
 {
+    public static void RegisterHandler<THandler>(IServiceCollection services, MessageHandlerRegistry registry)
+        where THandler : class, IMessageHandler
+    {
+        services.TryAddTransient<THandler>();
+
+        var requiredState = THandler.RequiredState?.Trim();
+        if (string.IsNullOrWhiteSpace(requiredState))
+        {
+            requiredState = null;
+        }
+
+        registry.Register(new MessageHandlerDescriptor(
+            typeof(THandler),
+            THandler.CanHandle,
+            static sp => sp.GetRequiredService<THandler>()
+        ), requiredState);
+    }
+
     public static void RegisterHandler(IServiceCollection services, MessageHandlerRegistry registry, Type handlerType)
     {
         services.TryAddTransient(handlerType);
 
-        var stateProp = handlerType.GetProperty("RequiredState", BindingFlags.Public | BindingFlags.Static);
+        var stateProp = handlerType.GetProperty(nameof(IMessageHandler.RequiredState), BindingFlags.Public | BindingFlags.Static);
         var rawState = (string?)stateProp?.GetValue(null);
         var requiredState = string.IsNullOrWhiteSpace(rawState) ? null : rawState.Trim();
 
-        registry.Register(handlerType, requiredState);
+        var canHandleMethod = handlerType.GetMethod(
+            nameof(IMessageHandler.CanHandle),
+            BindingFlags.Public | BindingFlags.Static,
+            [typeof(MessageContext)])
+            ?? throw new InvalidOperationException($"Handler '{handlerType.FullName}' must implement static bool CanHandle(MessageContext context).");
+
+        var canHandle = (Func<MessageContext, bool>)Delegate.CreateDelegate(typeof(Func<MessageContext, bool>), canHandleMethod);
+
+        registry.Register(new MessageHandlerDescriptor(
+            handlerType,
+            canHandle,
+            sp => sp.GetRequiredService(handlerType)
+        ), requiredState);
     }
 }

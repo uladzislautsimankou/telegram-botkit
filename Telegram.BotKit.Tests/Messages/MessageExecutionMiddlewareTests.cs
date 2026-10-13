@@ -1,5 +1,4 @@
 ﻿using FluentAssertions;
-using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
@@ -10,12 +9,27 @@ namespace Telegram.BotKit.Tests.Messages;
 
 public sealed class MessageExecutionMiddlewareTests
 {
+    private sealed class ExecutionSpyHandler : IMessageHandler
+    {
+        public int InvocationCount { get; private set; }
+        public MessageContext? LastContext { get; private set; }
+
+        public static bool CanHandle(MessageContext context) => true;
+
+        public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default)
+        {
+            InvocationCount++;
+            LastContext = context;
+            return Task.CompletedTask;
+        }
+    }
+
     // verifies that execution middleware invokes the matched message handler and does not call next
     [Fact]
     public async Task InvokeAsync_WhenMatchedHandlerIsNotNull_ShouldExecuteHandlerAndNotCallNext()
     {
         // arrange
-        var handler = Substitute.For<IMessageHandler>();
+        var handler = new ExecutionSpyHandler();
         var middleware = new MessageExecutionMiddleware();
 
         var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
@@ -35,7 +49,8 @@ public sealed class MessageExecutionMiddlewareTests
         await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
 
         // assert
-        await handler.Received(1).HandleAsync(context, TestContext.Current.CancellationToken);
+        handler.InvocationCount.Should().Be(1);
+        handler.LastContext.Should().BeSameAs(context);
         nextCalled.Should().BeFalse();
     }
 

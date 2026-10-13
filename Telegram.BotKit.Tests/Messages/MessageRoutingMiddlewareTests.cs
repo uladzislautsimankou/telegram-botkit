@@ -10,20 +10,39 @@ namespace Telegram.BotKit.Tests.Messages;
 
 public sealed class MessageRoutingMiddlewareTests
 {
-    private sealed class TestStateHandler(bool canHandle) : IMessageHandler
+    private sealed class MatchingStateHandler : IMessageHandler
     {
         public static string? RequiredState => "waiting_for_name";
-
-        public bool CanHandle(MessageContext context) => canHandle;
-
+        public static bool CanHandle(MessageContext context) => true;
         public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class TestGlobalHandler(bool canHandle) : IMessageHandler
+    private sealed class NonMatchingStateHandler : IMessageHandler
     {
-        public bool CanHandle(MessageContext context) => canHandle;
-
+        public static string? RequiredState => "waiting_for_name";
+        public static bool CanHandle(MessageContext context) => false;
         public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class MatchingGlobalHandler : IMessageHandler
+    {
+        public static bool CanHandle(MessageContext context) => true;
+        public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NonMatchingGlobalHandler : IMessageHandler
+    {
+        public static bool CanHandle(MessageContext context) => false;
+        public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private static MessageHandlerDescriptor CreateDescriptor<THandler>()
+        where THandler : class, IMessageHandler
+    {
+        return new MessageHandlerDescriptor(
+            typeof(THandler),
+            THandler.CanHandle,
+            static sp => sp.GetRequiredService<THandler>());
     }
 
     // verifies that a state-specific handler is preferred and routed to when the user is in that state
@@ -31,12 +50,12 @@ public sealed class MessageRoutingMiddlewareTests
     public async Task InvokeAsync_WhenUserStateIsSetAndMatchingStateHandlerExists_ShouldSetMatchedHandlerAndCallNext()
     {
         // arrange
-        var stateHandler = new TestStateHandler(canHandle: true);
-        var globalHandler = new TestGlobalHandler(canHandle: true);
+        var stateHandler = new MatchingStateHandler();
+        var globalHandler = new MatchingGlobalHandler();
 
         var registry = new MessageHandlerRegistry();
-        registry.Register(typeof(TestStateHandler), "waiting_for_name");
-        registry.Register(typeof(TestGlobalHandler), null);
+        registry.Register(CreateDescriptor<MatchingStateHandler>(), "waiting_for_name");
+        registry.Register(CreateDescriptor<MatchingGlobalHandler>(), null);
         registry.Build();
 
         var services = new ServiceCollection();
@@ -60,7 +79,7 @@ public sealed class MessageRoutingMiddlewareTests
         called.Should().BeTrue();
         context.MatchedHandler.Should().BeSameAs(stateHandler);
         context.MatchedMessageMetadata.Should().NotBeNull();
-        context.MatchedMessageMetadata!.HandlerType.Should().Be(typeof(TestStateHandler));
+        context.MatchedMessageMetadata!.HandlerType.Should().Be(typeof(MatchingStateHandler));
         context.MatchedMessageMetadata.HandlerInstance.Should().BeSameAs(stateHandler);
     }
 
@@ -69,10 +88,10 @@ public sealed class MessageRoutingMiddlewareTests
     public async Task InvokeAsync_WhenUserStateMatchesCaseInsensitively_ShouldSetMatchedHandlerAndCallNext()
     {
         // arrange
-        var stateHandler = new TestStateHandler(canHandle: true);
+        var stateHandler = new MatchingStateHandler();
 
         var registry = new MessageHandlerRegistry();
-        registry.Register(typeof(TestStateHandler), "waiting_for_name");
+        registry.Register(CreateDescriptor<MatchingStateHandler>(), "waiting_for_name");
         registry.Build();
 
         var services = new ServiceCollection();
@@ -101,16 +120,15 @@ public sealed class MessageRoutingMiddlewareTests
     public async Task InvokeAsync_WhenUserStateIsSetButNoStateHandlerCanHandle_ShouldFallbackToGlobalHandlerAndCallNext()
     {
         // arrange
-        var stateHandler = new TestStateHandler(canHandle: false);
-        var globalHandler = new TestGlobalHandler(canHandle: true);
+        var globalHandler = new MatchingGlobalHandler();
 
         var registry = new MessageHandlerRegistry();
-        registry.Register(typeof(TestStateHandler), "waiting_for_name");
-        registry.Register(typeof(TestGlobalHandler), null);
+        registry.Register(CreateDescriptor<NonMatchingStateHandler>(), "waiting_for_name");
+        registry.Register(CreateDescriptor<MatchingGlobalHandler>(), null);
         registry.Build();
 
         var services = new ServiceCollection();
-        services.AddSingleton(stateHandler);
+
         services.AddSingleton(globalHandler);
         await using var provider = services.BuildServiceProvider();
 
@@ -130,7 +148,7 @@ public sealed class MessageRoutingMiddlewareTests
         called.Should().BeTrue();
         context.MatchedHandler.Should().BeSameAs(globalHandler);
         context.MatchedMessageMetadata.Should().NotBeNull();
-        context.MatchedMessageMetadata!.HandlerType.Should().Be(typeof(TestGlobalHandler));
+        context.MatchedMessageMetadata!.HandlerType.Should().Be(typeof(MatchingGlobalHandler));
         context.MatchedMessageMetadata.HandlerInstance.Should().BeSameAs(globalHandler);
     }
 
@@ -139,16 +157,14 @@ public sealed class MessageRoutingMiddlewareTests
     public async Task InvokeAsync_WhenUserStateIsNullAndGlobalHandlerMatches_ShouldSetMatchedHandlerAndCallNext()
     {
         // arrange
-        var stateHandler = new TestStateHandler(canHandle: true);
-        var globalHandler = new TestGlobalHandler(canHandle: true);
+        var globalHandler = new MatchingGlobalHandler();
 
         var registry = new MessageHandlerRegistry();
-        registry.Register(typeof(TestStateHandler), "waiting_for_name");
-        registry.Register(typeof(TestGlobalHandler), null);
+        registry.Register(CreateDescriptor<MatchingStateHandler>(), "waiting_for_name");
+        registry.Register(CreateDescriptor<MatchingGlobalHandler>(), null);
         registry.Build();
 
         var services = new ServiceCollection();
-        services.AddSingleton(stateHandler);
         services.AddSingleton(globalHandler);
         await using var provider = services.BuildServiceProvider();
 
@@ -176,10 +192,10 @@ public sealed class MessageRoutingMiddlewareTests
     public async Task InvokeAsync_WhenUserStateIsWhitespace_ShouldTreatAsNoStateAndFallbackToGlobalHandler()
     {
         // arrange
-        var globalHandler = new TestGlobalHandler(canHandle: true);
+        var globalHandler = new MatchingGlobalHandler();
 
         var registry = new MessageHandlerRegistry();
-        registry.Register(typeof(TestGlobalHandler), null);
+        registry.Register(CreateDescriptor<MatchingGlobalHandler>(), null);
         registry.Build();
 
         var services = new ServiceCollection();
@@ -208,14 +224,11 @@ public sealed class MessageRoutingMiddlewareTests
     public async Task InvokeAsync_WhenNoHandlersCanHandleContext_ShouldNotSetMatchedHandlerAndShouldNotCallNext()
     {
         // arrange
-        var globalHandler = new TestGlobalHandler(canHandle: false);
-
         var registry = new MessageHandlerRegistry();
-        registry.Register(typeof(TestGlobalHandler), null);
+        registry.Register(CreateDescriptor<NonMatchingGlobalHandler>(), null);
         registry.Build();
 
         var services = new ServiceCollection();
-        services.AddSingleton(globalHandler);
         await using var provider = services.BuildServiceProvider();
 
         var middleware = new MessageRoutingMiddleware(registry, provider);

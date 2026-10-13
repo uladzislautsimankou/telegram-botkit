@@ -20,12 +20,12 @@ public interface IMessageHandler
     /// <returns>True if this handler can process the message; otherwise, false.</returns>
     /// <example>
     /// <code>
-    /// public bool CanHandle(MessageContext context) =>
+    /// public static bool CanHandle(MessageContext context) =>
     ///     context.Message is { Chat.Type: ChatType.Private, Entities: { } entities }
     ///     && entities.Any(e => e.Type == MessageEntityType.CustomEmoji);
     /// </code>
     /// </example>
-    bool CanHandle(MessageContext context);
+    static abstract bool CanHandle(MessageContext context);
 
     /// <summary>
     /// Handles the message execution.

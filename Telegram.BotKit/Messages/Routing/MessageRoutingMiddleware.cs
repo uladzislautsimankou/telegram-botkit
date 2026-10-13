@@ -19,11 +19,11 @@ internal sealed class MessageRoutingMiddleware(
         // find a handler bound specifically to the current user state
         if (!string.IsNullOrWhiteSpace(context.UserState))
         {
-            matched = FindMatch(registry.GetHandlerTypesForState(context.UserState.Trim()), context);
+            matched = FindMatch(registry.GetHandlersForState(context.UserState.Trim()), context);
         }
 
         // fallback to global state-agnostic handlers when no state-specific handler matched
-        matched ??= FindMatch(registry.GetGlobalHandlerTypes(), context);
+        matched ??= FindMatch(registry.GetGlobalHandlers(), context);
 
         if (matched is null)
         {
@@ -36,14 +36,15 @@ internal sealed class MessageRoutingMiddleware(
         return next();
     }
 
-    private IMessageHandler? FindMatch(ReadOnlySpan<Type> handlerTypes, MessageContext context)
+    private IMessageHandler? FindMatch(ReadOnlySpan<MessageHandlerDescriptor> descriptors, MessageContext context)
     {
-        for (var i = 0; i < handlerTypes.Length; i++)
+        for (var i = 0; i < descriptors.Length; i++)
         {
-            var handler = (IMessageHandler)serviceProvider.GetRequiredService(handlerTypes[i]);
-            if (handler.CanHandle(context))
+            ref readonly var descriptor = ref descriptors[i];
+
+            if (descriptor.CanHandle(context))
             {
-                return handler;
+                return (IMessageHandler)descriptor.Factory(serviceProvider);
             }
         }
 

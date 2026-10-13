@@ -3,60 +3,59 @@
 namespace Telegram.BotKit.Messages.Routing;
 
 /// <summary>
-/// A registry that groups message handler types by their required user states using frozen lookup structures.
+/// A registry that groups message handlers by their required user states using frozen lookup structures.
 /// </summary>
 internal sealed class MessageHandlerRegistry
 {
-    private readonly Dictionary<string, List<Type>> _stateHandlerTypes = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<Type> _globalHandlerTypes = [];
+    private readonly Dictionary<string, List<MessageHandlerDescriptor>> _stateHandlers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<MessageHandlerDescriptor> _globalHandlers = [];
 
-    public void Register(Type handlerType, string? requiredState)
+    public void Register(MessageHandlerDescriptor descriptor, string? requiredState)
     {
         if (!string.IsNullOrWhiteSpace(requiredState))
         {
             var trimmedState = requiredState.Trim();
-            if (!_stateHandlerTypes.TryGetValue(trimmedState, out var list))
+            if (!_stateHandlers.TryGetValue(trimmedState, out var list))
             {
                 list = [];
-                _stateHandlerTypes[trimmedState] = list;
+                _stateHandlers[trimmedState] = list;
             }
 
-            if (!list.Contains(handlerType))
+            if (!list.Any(d => d.HandlerType == descriptor.HandlerType))
             {
-                list.Add(handlerType);
+                list.Add(descriptor);
             }
         }
         else
         {
-            if (!_globalHandlerTypes.Contains(handlerType))
+            if (!_globalHandlers.Any(d => d.HandlerType == descriptor.HandlerType))
             {
-                _globalHandlerTypes.Add(handlerType);
+                _globalHandlers.Add(descriptor);
             }
         }
     }
 
     /// <summary>
-    /// Builds immutable frozen state lookup structures and flattens handler type arrays.
+    /// Builds immutable frozen state lookup structures and flattens handler arrays.
     /// </summary>
     public void Build()
     {
-        _frozenStateHandlerTypes = _stateHandlerTypes.ToFrozenDictionary(
+        _frozenStateHandlers = _stateHandlers.ToFrozenDictionary(
             kvp => kvp.Key,
             kvp => kvp.Value.ToArray(),
             StringComparer.OrdinalIgnoreCase);
 
-        _frozenGlobalHandlerTypes = _globalHandlerTypes.ToArray();
+        _frozenGlobalHandlers = _globalHandlers.ToArray();
 
-        // clear mutable builders to release startup memory
-        _stateHandlerTypes.Clear();
-        _globalHandlerTypes.Clear();
+        _stateHandlers.Clear();
+        _globalHandlers.Clear();
     }
 
-    public ReadOnlySpan<Type> GetHandlerTypesForState(string state) =>
-        _frozenStateHandlerTypes.TryGetValue(state, out var types) ? types : [];
+    public ReadOnlySpan<MessageHandlerDescriptor> GetHandlersForState(string state) =>
+        _frozenStateHandlers.TryGetValue(state, out var handlers) ? handlers : [];
 
-    public ReadOnlySpan<Type> GetGlobalHandlerTypes() => _frozenGlobalHandlerTypes;
+    public ReadOnlySpan<MessageHandlerDescriptor> GetGlobalHandlers() => _frozenGlobalHandlers;
 
-    private FrozenDictionary<string, Type[]> _frozenStateHandlerTypes = FrozenDictionary<string, Type[]>.Empty;
-    private Type[] _frozenGlobalHandlerTypes = [];
+    private FrozenDictionary<string, MessageHandlerDescriptor[]> _frozenStateHandlers = FrozenDictionary<string, MessageHandlerDescriptor[]>.Empty;
+    private MessageHandlerDescriptor[] _frozenGlobalHandlers = [];
 }

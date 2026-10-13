@@ -12,7 +12,7 @@ public sealed class MessagePipelineRegistrationTests
     {
         public static string? RequiredState => "registration";
 
-        public bool CanHandle(MessageContext context) => true;
+        public static bool CanHandle(MessageContext context) => true;
 
         public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
@@ -20,7 +20,7 @@ public sealed class MessagePipelineRegistrationTests
 
     private sealed class GlobalMessageHandler : IMessageHandler
     {
-        public bool CanHandle(MessageContext context) => true;
+        public static bool CanHandle(MessageContext context) => true;
 
         public Task HandleAsync(MessageContext context, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
@@ -43,8 +43,8 @@ public sealed class MessagePipelineRegistrationTests
         registry.Build();
 
         // assert
-        registry.GetHandlerTypesForState("registration").ToArray().Should().ContainSingle().Which.Should().Be(typeof(StateBoundMessageHandler));
-        registry.GetGlobalHandlerTypes().ToArray().Should().ContainSingle().Which.Should().Be(typeof(GlobalMessageHandler));
+        registry.GetHandlersForState("registration").ToArray().Should().ContainSingle().Which.HandlerType.Should().Be(typeof(StateBoundMessageHandler));
+        registry.GetGlobalHandlers().ToArray().Should().ContainSingle().Which.HandlerType.Should().Be(typeof(GlobalMessageHandler));
 
         provider.GetRequiredService<StateBoundMessageHandler>().Should().NotBeNull();
         provider.GetRequiredService<GlobalMessageHandler>().Should().NotBeNull();
@@ -67,7 +67,7 @@ public sealed class MessagePipelineRegistrationTests
         registry.Build();
 
         // assert
-        registry.GetGlobalHandlerTypes().ToArray().Should().ContainSingle().Which.Should().Be(typeof(GlobalMessageHandler));
+        registry.GetGlobalHandlers().ToArray().Should().ContainSingle().Which.HandlerType.Should().Be(typeof(GlobalMessageHandler));
     }
 
     // verifies that duplicate message handler registrations are ignored by the registry and service collection
@@ -87,7 +87,7 @@ public sealed class MessagePipelineRegistrationTests
         registry.Build();
 
         // assert
-        registry.GetGlobalHandlerTypes().ToArray().Should().ContainSingle().Which.Should().Be(typeof(GlobalMessageHandler));
+        registry.GetGlobalHandlers().ToArray().Should().ContainSingle().Which.HandlerType.Should().Be(typeof(GlobalMessageHandler));
         provider.GetServices<GlobalMessageHandler>().Should().ContainSingle();
     }
 }
