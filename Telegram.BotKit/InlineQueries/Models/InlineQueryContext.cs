@@ -34,6 +34,17 @@ public sealed class InlineQueryContext
     public InlineQuery Query { get; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the response should NOT be sent to Telegram.
+    /// Middlewares can set this to true to suppress answering (e.g. rate-limit, auth failure).
+    /// </summary>
+    public bool SkipAnswer { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether at least one handler matched and executed.
+    /// </summary>
+    public bool IsHandled { get; internal set; }
+
+    /// <summary>
     /// Gets a thread-safe snapshot of the aggregated inline results accumulated from all matched handlers.
     /// </summary>
     public IReadOnlyList<InlineQueryResult> Results

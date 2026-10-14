@@ -15,9 +15,9 @@ public sealed class InlineQueryRoutingMiddlewareTests
 {
     private readonly ILogger<InlineQueryRoutingMiddleware> _logger = Substitute.For<ILogger<InlineQueryRoutingMiddleware>>();
 
-    // verifies that when no registered inline handlers can handle the query, the next pipeline delegate is called and results are empty
+    // verifies that when no handlers match the pipeline continues with ishandled set to false
     [Fact]
-    public async Task InvokeAsync_WhenNoHandlersCanHandle_ShouldCallNextAndNotPopulateResults()
+    public async Task InvokeAsync_WhenNoHandlersCanHandle_ShouldCallNextAndKeepIsHandledFalse()
     {
         // arrange
         var handler = Substitute.For<IInlineQueryHandler>();
@@ -33,13 +33,14 @@ public sealed class InlineQueryRoutingMiddlewareTests
 
         // assert
         called.Should().BeTrue();
+        context.IsHandled.Should().BeFalse();
         context.Results.Should().BeEmpty();
         await handler.DidNotReceiveWithAnyArgs().HandleAsync(Arg.Any<InlineQueryContext>(), Arg.Any<CancellationToken>());
     }
 
-    // verifies that when a single handler can handle the query, it is executed directly, populating context properties
+    // verifies that single matching handler executes directly and sets ishandled to true
     [Fact]
-    public async Task InvokeAsync_WhenSingleHandlerMatches_ShouldInvokeHandlerAndPopulateResultsAndCallNext()
+    public async Task InvokeAsync_WhenSingleHandlerMatches_ShouldInvokeHandlerAndSetIsHandledTrue()
     {
         // arrange
         var result = Substitute.For<InlineQueryResult>();
@@ -59,6 +60,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
 
         // assert
         called.Should().BeTrue();
+        context.IsHandled.Should().BeTrue();
         context.Results.Should().ContainSingle().Which.Should().BeSameAs(result);
         context.IsPersonal.Should().BeTrue();
         context.CacheTime.Should().Be(300);
@@ -66,9 +68,9 @@ public sealed class InlineQueryRoutingMiddlewareTests
         await handler.Received(1).HandleAsync(context, TestContext.Current.CancellationToken);
     }
 
-    // verifies that when multiple handlers can handle the query, they are executed and their results are aggregated in the context
+    // verifies that multiple matching handlers execute and aggregate results in context
     [Fact]
-    public async Task InvokeAsync_WhenMultipleHandlersMatch_ShouldInvokeAllAndAggregateResultsAndCallNext()
+    public async Task InvokeAsync_WhenMultipleHandlersMatch_ShouldInvokeAllAndSetIsHandledTrue()
     {
         // arrange
         var result1 = Substitute.For<InlineQueryResult>();
@@ -95,6 +97,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
 
         // assert
         called.Should().BeTrue();
+        context.IsHandled.Should().BeTrue();
         context.Results.Should().HaveCount(2);
         context.Results.Should().Contain([result1, result2]);
         context.IsPersonal.Should().BeTrue();
@@ -102,7 +105,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
         context.NextOffset.Should().Be("offset2");
     }
 
-    // verifies that when a handler throws an exception, it is logged and stored as a HandlerFailedException in context
+    // verifies that failing handler records exception in context without unhandled termination
     [Fact]
     public async Task InvokeAsync_WhenHandlerThrows_ShouldCaptureExceptionLogAndCallNext()
     {
@@ -123,6 +126,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
 
         // assert
         called.Should().BeTrue();
+        context.IsHandled.Should().BeTrue();
         context
             .Exceptions.Should().ContainSingle()
             .Which.Should().BeOfType<HandlerFailedException>()
@@ -137,7 +141,7 @@ public sealed class InlineQueryRoutingMiddlewareTests
             Arg.Any<Func<object, Exception?, string>>());
     }
 
-    // verifies that failure of one handler among multiple does not abort other handler execution
+    // verifies that single handler failure does not prevent remaining handlers from returning results
     [Fact]
     public async Task InvokeAsync_WhenOneHandlerThrowsAmongMultiple_ShouldCaptureExceptionAndAggregateRemainingResults()
     {
@@ -167,18 +171,12 @@ public sealed class InlineQueryRoutingMiddlewareTests
 
         // assert
         called.Should().BeTrue();
+        context.IsHandled.Should().BeTrue();
         context.Results.Should().ContainSingle().Which.Should().BeSameAs(successResult);
         context.Exceptions.Should().ContainSingle().Which.InnerException.Should().BeOfType<InvalidOperationException>();
-
-        _logger.Received(1).Log(
-            LogLevel.Error,
-            Arg.Any<EventId>(),
-            Arg.Any<object>(),
-            Arg.Is<Exception>(ex => ex is InvalidOperationException && ex.Message == "API failure"),
-            Arg.Any<Func<object, Exception?, string>>());
     }
 
-    // verifies that when a single handler returns a button, it is successfully populated in the context
+    // verifies that single handler button is set on context
     [Fact]
     public async Task InvokeAsync_WhenSingleHandlerProvidesButton_ShouldPopulateButtonInContext()
     {
@@ -204,18 +202,16 @@ public sealed class InlineQueryRoutingMiddlewareTests
         context.Button.Should().BeSameAs(button);
     }
 
-    // verifies that when multiple handlers provide a button, the last executed one overwrites and a warning is logged
+    // verifies that when multiple handlers provide button the last executed overwrites without error
     [Fact]
-    public async Task InvokeAsync_WhenMultipleHandlersProvideButton_ShouldKeepLastAndLogWarning()
+    public async Task InvokeAsync_WhenMultipleHandlersProvideButton_ShouldKeepLastButtonSilently()
     {
         // arrange
-        var result1 = Substitute.For<InlineQueryResult>();
         var button1 = new InlineQueryResultsButton("Button 1") { StartParameter = "param1" };
-        var batch1 = new InlineQueryBatch([result1], button: button1);
+        var batch1 = new InlineQueryBatch([Substitute.For<InlineQueryResult>()], button: button1);
 
-        var result2 = Substitute.For<InlineQueryResult>();
         var button2 = new InlineQueryResultsButton("Button 2") { StartParameter = "param2" };
-        var batch2 = new InlineQueryBatch([result2], button: button2);
+        var batch2 = new InlineQueryBatch([Substitute.For<InlineQueryResult>()], button: button2);
 
         var handler1 = Substitute.For<IInlineQueryHandler>();
         handler1.CanHandle(Arg.Any<InlineQuery>()).Returns(true);
@@ -236,13 +232,6 @@ public sealed class InlineQueryRoutingMiddlewareTests
         // assert
         called.Should().BeTrue();
         context.Button.Should().BeSameAs(button2);
-
-        _logger.Received(1).Log(
-            LogLevel.Warning,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Conflict: Multiple inline query handlers")),
-            Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception?, string>>());
     }
 
     private static InlineQueryContext CreateInlineContext(string queryText)

@@ -6,9 +6,6 @@ using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.InlineQueries.Routing;
 
-/// <summary>
-/// Routing middleware responsible for identifying and executing matching inline query handlers in a deterministic order.
-/// </summary>
 internal sealed class InlineQueryRoutingMiddleware(
     IEnumerable<IInlineQueryHandler> handlers,
     ILogger<InlineQueryRoutingMiddleware> logger) : IInlineQueryMiddleware
@@ -31,11 +28,12 @@ internal sealed class InlineQueryRoutingMiddleware(
             return;
         }
 
-        // execute directly without array allocation when only one handler matched
+        context.IsHandled = true;
+
+        // fast path: execute directly when only a single handler matched
         if (activeHandlers.Count is 1)
         {
             var handler = activeHandlers[0];
-
             try
             {
                 var batch = await handler.HandleAsync(context, cancellationToken);
@@ -51,7 +49,7 @@ internal sealed class InlineQueryRoutingMiddleware(
             return;
         }
 
-        // execute all handlers concurrently
+        // fan-out: execute all matching handlers concurrently
         var tasks = new Task<(IInlineQueryHandler Handler, InlineQueryBatch? Batch, Exception? Exception)>[activeHandlers.Count];
         for (var i = 0; i < activeHandlers.Count; i++)
         {
@@ -60,7 +58,6 @@ internal sealed class InlineQueryRoutingMiddleware(
 
         var results = await Task.WhenAll(tasks);
 
-        // apply batches sequentially to guarantee deterministic result ordering
         for (var i = 0; i < results.Length; i++)
         {
             var (handler, batch, exception) = results[i];
@@ -97,27 +94,17 @@ internal sealed class InlineQueryRoutingMiddleware(
 
     private void ApplyBatch(InlineQueryContext context, InlineQueryBatch? batch, string handlerName)
     {
-        if (batch is null)
-        {
-            return;
-        }
+        if (batch is null) return;
 
         if (batch.Results is not null)
         {
             context.AddResults(batch.Results);
         }
 
-        var hasConflict = context.MergeConfiguration(
+        context.MergeConfiguration(
             isPersonal: batch.IsPersonal,
             cacheTime: batch.CacheTime,
             nextOffset: batch.NextOffset,
             button: batch.Button);
-
-        if (hasConflict)
-        {
-            logger.LogWarning(
-                "Conflict: Multiple inline query handlers provided a button. Overwriting previous button with the one from '{HandlerName}'",
-                handlerName);
-        }
     }
 }

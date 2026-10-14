@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Telegram.BotKit.InlineQueries;
 using Telegram.BotKit.InlineQueries.Abstractions;
+using Telegram.BotKit.InlineQueries.Middlewares;
 using Telegram.BotKit.InlineQueries.Models;
 using Telegram.BotKit.InlineQueries.Routing;
 using Telegram.BotKit.Shared.Pipeline;
@@ -28,6 +29,18 @@ public sealed class InlineQueryPipelineBuilder(IServiceCollection services)
         }
 
         Steps.Add(new PipelineStep(PipelineStepType.Routing, typeof(InlineQueryRoutingMiddleware)));
+        return this;
+    }
+
+    /// <summary>
+    /// Explicitly adds the answer middleware to the pipeline.
+    /// </summary>
+    public InlineQueryPipelineBuilder UseAnswer<TMiddleware>()
+        where TMiddleware : class, IInlineQueryAnswerMiddleware
+    {
+        if (Steps.Any(s => s.Type == PipelineStepType.Execution)) return this;
+        Services.TryAddTransient<TMiddleware>();
+        Steps.Add(new PipelineStep(PipelineStepType.Execution, typeof(TMiddleware)));
         return this;
     }
 
@@ -69,16 +82,18 @@ public static class InlineQueryServiceCollectionExtensions
         }
 
         services.AddTransient<InlineQueryRoutingMiddleware>();
+        services.TryAddTransient<IInlineQueryAnswerMiddleware, DefaultInlineQueryAnswerMiddleware>();
 
         configure?.Invoke(builder);
 
-        if (builder.Steps.Count is 0)
-        {
-            builder.UseRouting();
-        }
-        else if (!builder.Steps.Any(s => s.Type == PipelineStepType.Routing))
+        if (!builder.Steps.Any(s => s.Type == PipelineStepType.Routing))
         {
             builder.Steps.Insert(0, new PipelineStep(PipelineStepType.Routing, typeof(InlineQueryRoutingMiddleware)));
+        }
+
+        if (!builder.Steps.Any(s => s.Type == PipelineStepType.Execution))
+        {
+            builder.Steps.Add(new PipelineStep(PipelineStepType.Execution, typeof(IInlineQueryAnswerMiddleware)));
         }
 
         var compiledPipeline = builder.Build(static (middleware, context, next, ct) =>

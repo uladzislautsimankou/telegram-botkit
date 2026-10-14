@@ -1,69 +1,35 @@
 ﻿using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using NSubstitute;
-using Telegram.Bot;
-using Telegram.Bot.Requests;
-using Telegram.Bot.Requests.Abstractions;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries;
-using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.InlineQueries;
 
 public sealed class InlineQueryDispatcherTests
 {
-    private readonly ITelegramBotClient _botClient = Substitute.For<ITelegramBotClient>();
-    private readonly ILogger<InlineQueryDispatcher> _logger = Substitute.For<ILogger<InlineQueryDispatcher>>();
-
-    public InlineQueryDispatcherTests()
-    {
-        _logger.BeginScope(Arg.Any<object>()).Returns(Substitute.For<IDisposable>());
-        _botClient.SendRequest(Arg.Any<IRequest<bool>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
-    }
-
-    private sealed class DummyInlineMiddleware : IInlineQueryMiddleware
-    {
-        public ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
-        {
-            context.AddResults([Substitute.For<InlineQueryResult>()]);
-            context.MergeConfiguration(
-                isPersonal: true,
-                cacheTime: 600,
-                nextOffset: "page_2",
-                button: null);
-
-            return next();
-        }
-    }
-
-    private sealed class FaultyInlineMiddleware : IInlineQueryMiddleware
-    {
-        public ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("Simulated pipeline failure");
-    }
-
-    // verifies that valid inline query executes pipeline and calls answer inline query with expected parameters
+    // verifies that valid query creates dedicated async scope and invokes compiled pipeline
     [Fact]
-    public async Task DispatchAsync_WhenQueryIsValid_ShouldExecutePipelineAndAnswerInlineQuery()
+    public async Task DispatchAsync_WhenQueryIsValid_ShouldCreateAsyncScopeAndExecutePipeline()
     {
         // arrange
-        var dummyMiddleware = new DummyInlineMiddleware();
         var services = new ServiceCollection();
-        services.AddSingleton(dummyMiddleware);
+        await using var rootProvider = services.BuildServiceProvider();
 
-        var pipelineBuilder = new InlineQueryPipelineBuilder(services);
-        pipelineBuilder.UseMiddleware<DummyInlineMiddleware>();
+        var wasExecuted = false;
+        IServiceProvider? capturedScopedProvider = null;
+        InlineQueryContext? capturedContext = null;
 
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        PipelineDelegate<InlineQueryContext> compiledPipeline = (ctx, sp, ct) =>
+        {
+            wasExecuted = true;
+            capturedContext = ctx;
+            capturedScopedProvider = sp;
+            return ValueTask.CompletedTask;
+        };
 
-        await using var provider = services.BuildServiceProvider();
-        var dispatcher = new InlineQueryDispatcher(_botClient, provider, compiledPipeline, _logger);
+        var dispatcher = new InlineQueryDispatcher(rootProvider, compiledPipeline);
 
         var query = new InlineQuery
         {
@@ -76,123 +42,48 @@ public sealed class InlineQueryDispatcherTests
         await dispatcher.DispatchAsync(query, TestContext.Current.CancellationToken);
 
         // assert
-        await _botClient.Received(1).SendRequest(
-            Arg.Is<IRequest<bool>>(req => IsExpectedAnswerRequest(req)),
-            Arg.Any<CancellationToken>());
+        wasExecuted.Should().BeTrue();
+        capturedContext.Should().NotBeNull();
+        capturedContext!.Query.Id.Should().Be("query_123");
+        capturedScopedProvider.Should().NotBeNull();
+        capturedScopedProvider.Should().NotBeSameAs(rootProvider);
     }
 
-    // verifies that pipeline failure logs error but still calls answer inline query to release client spinner
+    // verifies that null query throws argument null exception
     [Fact]
-    public async Task DispatchAsync_WhenPipelineThrows_ShouldLogErrorAndAnswerInlineQuery()
+    public async Task DispatchAsync_WhenQueryIsNull_ShouldThrowArgumentNullException()
     {
         // arrange
-        var faultyMiddleware = new FaultyInlineMiddleware();
         var services = new ServiceCollection();
-        services.AddSingleton(faultyMiddleware);
-
-        var pipelineBuilder = new InlineQueryPipelineBuilder(services);
-        pipelineBuilder.UseMiddleware<FaultyInlineMiddleware>();
-
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
-
         await using var provider = services.BuildServiceProvider();
-        var dispatcher = new InlineQueryDispatcher(_botClient, provider, compiledPipeline, _logger);
 
-        var query = new InlineQuery
+        PipelineDelegate<InlineQueryContext> compiledPipeline = (ctx, sp, ct) => ValueTask.CompletedTask;
+        var dispatcher = new InlineQueryDispatcher(provider, compiledPipeline);
+
+        // act
+        var act = () => dispatcher.DispatchAsync(null!, TestContext.Current.CancellationToken);
+
+        // assert
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithParameterName("query");
+    }
+
+    // verifies that cancellation token is forwarded to the compiled pipeline delegate
+    [Fact]
+    public async Task DispatchAsync_WhenCancellationTokenProvided_ShouldPassTokenToPipeline()
+    {
+        // arrange
+        var services = new ServiceCollection();
+        await using var provider = services.BuildServiceProvider();
+
+        var capturedToken = CancellationToken.None;
+        PipelineDelegate<InlineQueryContext> compiledPipeline = (ctx, sp, ct) =>
         {
-            Id = "query_123",
-            Query = "search",
-            From = new User { Id = 456, FirstName = "User" }
+            capturedToken = ct;
+            return ValueTask.CompletedTask;
         };
 
-        // act
-        await dispatcher.DispatchAsync(query, TestContext.Current.CancellationToken);
-
-        // assert
-        _logger.Received(1).Log(
-            LogLevel.Error,
-            Arg.Any<EventId>(),
-            Arg.Any<object>(),
-            Arg.Is<Exception>(ex => ex is InvalidOperationException && ex.Message == "Simulated pipeline failure"),
-            Arg.Any<Func<object, Exception?, string>>());
-
-        await _botClient.Received(1).SendRequest(
-            Arg.Is<IRequest<bool>>(req => IsFallbackAnswerRequest(req)),
-            Arg.Any<CancellationToken>());
-    }
-
-    // verifies that null query returns early without calling pipeline or api
-    [Fact]
-    public async Task DispatchAsync_WhenQueryIsNull_ShouldReturnEarlyAndNotExecutePipelineOrBotCall()
-    {
-        // arrange
-        var services = new ServiceCollection();
-        var pipelineBuilder = new InlineQueryPipelineBuilder(services);
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
-
-        await using var provider = services.BuildServiceProvider();
-        var dispatcher = new InlineQueryDispatcher(_botClient, provider, compiledPipeline, _logger);
-
-        // act
-        await dispatcher.DispatchAsync(null!, TestContext.Current.CancellationToken);
-
-        // assert
-        await _botClient.DidNotReceiveWithAnyArgs().SendRequest(
-            Arg.Any<IRequest<bool>>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    // verifies that answer inline query network exceptions are caught and logged without rethrowing
-    [Fact]
-    public async Task DispatchAsync_WhenAnswerInlineQueryThrows_ShouldCatchAndLogErrorWithoutRethrowing()
-    {
-        // arrange
-        _botClient.SendRequest(Arg.Any<IRequest<bool>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<bool>(new HttpRequestException("Network failure")));
-
-        var services = new ServiceCollection();
-        var pipelineBuilder = new InlineQueryPipelineBuilder(services);
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
-
-        await using var provider = services.BuildServiceProvider();
-        var dispatcher = new InlineQueryDispatcher(_botClient, provider, compiledPipeline, _logger);
-
-        var query = new InlineQuery
-        {
-            Id = "query_123",
-            Query = "search",
-            From = new User { Id = 456, FirstName = "User" }
-        };
-
-        // act
-        var act = () => dispatcher.DispatchAsync(query, TestContext.Current.CancellationToken);
-
-        // assert
-        await act.Should().NotThrowAsync();
-
-        _logger.Received(1).Log(
-            LogLevel.Error,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Failed to send inline query answer")),
-            Arg.Is<Exception>(ex => ex is HttpRequestException),
-            Arg.Any<Func<object, Exception?, string>>());
-    }
-
-    // verifies that cancellation token is passed down to bot client call
-    [Fact]
-    public async Task DispatchAsync_WhenCancellationTokenProvided_ShouldPassTokenToBotClient()
-    {
-        // arrange
-        var services = new ServiceCollection();
-        var pipelineBuilder = new InlineQueryPipelineBuilder(services);
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
-
-        await using var provider = services.BuildServiceProvider();
-        var dispatcher = new InlineQueryDispatcher(_botClient, provider, compiledPipeline, _logger);
+        var dispatcher = new InlineQueryDispatcher(provider, compiledPipeline);
 
         var query = new InlineQuery
         {
@@ -207,24 +98,6 @@ public sealed class InlineQueryDispatcherTests
         await dispatcher.DispatchAsync(query, cts.Token);
 
         // assert
-        await _botClient.Received(1).SendRequest(
-            Arg.Any<IRequest<bool>>(),
-            cts.Token);
+        capturedToken.Should().Be(cts.Token);
     }
-
-    private static bool IsExpectedAnswerRequest(IRequest<bool> req) =>
-        req is AnswerInlineQueryRequest request
-        && request.InlineQueryId == "query_123"
-        && request.Results.Count() == 1
-        && request.IsPersonal == true
-        && request.CacheTime == 600
-        && request.NextOffset == "page_2";
-
-    private static bool IsFallbackAnswerRequest(IRequest<bool> req) =>
-        req is AnswerInlineQueryRequest request
-        && request.InlineQueryId == "query_123"
-        && !request.Results.Any()
-        && request.IsPersonal == false
-        && request.CacheTime == null
-        && request.NextOffset == null;
 }
