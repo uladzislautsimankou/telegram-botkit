@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Telegram.Bot.Types;
 using Telegram.BotKit.ChosenInlineResults;
 using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
@@ -38,8 +39,22 @@ public sealed class ChosenInlineResultPipelineBuilder(IServiceCollection service
     /// <returns>The builder instance for method chaining.</returns>
     public ChosenInlineResultPipelineBuilder AddHandler<THandler>() where THandler : class, IChosenInlineResultHandler
     {
-        ChosenInlineResultRegistrationHelper.RegisterHandler(Services, typeof(THandler));
+        var registry = GetOrCreateRegistry();
+        ChosenInlineResultRegistrationHelper.RegisterHandler<THandler>(Services, registry);
         return this;
+    }
+
+    private ChosenInlineResultHandlerRegistry GetOrCreateRegistry()
+    {
+        var registryDescriptor = Services.FirstOrDefault(d => d.ServiceType == typeof(ChosenInlineResultHandlerRegistry));
+        if (registryDescriptor?.ImplementationInstance is ChosenInlineResultHandlerRegistry r)
+        {
+            return r;
+        }
+
+        var registry = new ChosenInlineResultHandlerRegistry();
+        Services.AddSingleton(registry);
+        return registry;
     }
 }
 
@@ -60,18 +75,23 @@ public static class ChosenInlineResultServiceCollectionExtensions
         Action<ChosenInlineResultPipelineBuilder>? configure = null,
         params Assembly[] assemblies)
     {
+        var registry = new ChosenInlineResultHandlerRegistry();
+        services.AddSingleton(registry);
+
         var builder = new ChosenInlineResultPipelineBuilder(services);
         var targetAssemblies = assemblies.Length is 0 ? [Assembly.GetCallingAssembly()] : assemblies;
 
         foreach (var assembly in targetAssemblies)
         {
-            RegisterHandlersFromAssembly(services, assembly);
+            RegisterHandlersFromAssembly(services, assembly, registry);
         }
 
         services.AddTransient<ChosenInlineResultRoutingMiddleware>();
         services.AddTransient<ChosenInlineResultExecutionMiddleware>();
 
         configure?.Invoke(builder);
+
+        registry.Build();
 
         if (builder.Steps.Count is 0)
         {
@@ -93,7 +113,7 @@ public static class ChosenInlineResultServiceCollectionExtensions
         return services;
     }
 
-    private static void RegisterHandlersFromAssembly(IServiceCollection services, Assembly assembly)
+    private static void RegisterHandlersFromAssembly(IServiceCollection services, Assembly assembly, ChosenInlineResultHandlerRegistry registry)
     {
         var handlerType = typeof(IChosenInlineResultHandler);
 
@@ -112,7 +132,7 @@ public static class ChosenInlineResultServiceCollectionExtensions
             var type = allTypes[i];
             if (!type.IsAbstract && !type.IsInterface && handlerType.IsAssignableFrom(type))
             {
-                ChosenInlineResultRegistrationHelper.RegisterHandler(services, type);
+                ChosenInlineResultRegistrationHelper.RegisterHandler(services, registry, type);
             }
         }
     }
@@ -120,9 +140,34 @@ public static class ChosenInlineResultServiceCollectionExtensions
 
 internal static class ChosenInlineResultRegistrationHelper
 {
-    public static void RegisterHandler(IServiceCollection services, Type handlerType)
+    public static void RegisterHandler<THandler>(IServiceCollection services, ChosenInlineResultHandlerRegistry registry)
+        where THandler : class, IChosenInlineResultHandler
+    {
+        services.TryAddTransient<THandler>();
+
+        registry.Register(new ChosenInlineResultHandlerDescriptor(
+            typeof(THandler),
+            THandler.CanHandle,
+            static sp => sp.GetRequiredService<THandler>()
+        ));
+    }
+
+    public static void RegisterHandler(IServiceCollection services, ChosenInlineResultHandlerRegistry registry, Type handlerType)
     {
         services.TryAddTransient(handlerType);
-        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IChosenInlineResultHandler), handlerType));
+
+        var canHandleMethod = handlerType.GetMethod(
+            nameof(IChosenInlineResultHandler.CanHandle),
+            BindingFlags.Public | BindingFlags.Static,
+            [typeof(ChosenInlineResult)])
+            ?? throw new InvalidOperationException($"Handler '{handlerType.FullName}' must implement static bool CanHandle(ChosenInlineResult chosenResult).");
+
+        var canHandle = (Func<ChosenInlineResult, bool>)Delegate.CreateDelegate(typeof(Func<ChosenInlineResult, bool>), canHandleMethod);
+
+        registry.Register(new ChosenInlineResultHandlerDescriptor(
+            handlerType,
+            canHandle,
+            sp => sp.GetRequiredService(handlerType)
+        ));
     }
 }

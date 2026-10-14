@@ -8,16 +8,22 @@ namespace Telegram.BotKit.ChosenInlineResults.Routing;
 /// Routing middleware responsible for identifying the appropriate chosen inline result handler.
 /// </summary>
 internal sealed class ChosenInlineResultRoutingMiddleware(
-    IEnumerable<IChosenInlineResultHandler> handlers) : IChosenInlineResultMiddleware
+    ChosenInlineResultHandlerRegistry registry,
+    IServiceProvider serviceProvider) : IChosenInlineResultMiddleware
 {
     public ValueTask InvokeAsync(ChosenInlineResultContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        foreach (var handler in handlers)
+        var handlers = registry.GetHandlers();
+
+        for (var i = 0; i < handlers.Length; i++)
         {
-            if (handler.CanHandle(context.Result))
+            ref readonly var descriptor = ref handlers[i];
+
+            if (descriptor.CanHandle(context.Result))
             {
-                context.MatchedHandler = handler;
-                context.MatchedChosenInlineResultMetadata = new ChosenInlineResultMetadata(handler.GetType(), handler);
+                var instance = (IChosenInlineResultHandler)descriptor.Factory(serviceProvider);
+                context.MatchedHandler = instance;
+                context.MatchedChosenInlineResultMetadata = new ChosenInlineResultMetadata(descriptor.HandlerType, instance);
                 break;
             }
         }
