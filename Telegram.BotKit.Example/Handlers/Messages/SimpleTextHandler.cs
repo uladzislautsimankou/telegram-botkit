@@ -12,7 +12,7 @@ internal sealed class SimpleTextHandler(ITelegramBotClient bot) : IMessageHandle
 {
     private const string Trigger = "repeat";
 
-    public bool CanHandle(MessageContext context) =>
+    public static bool CanHandle(MessageContext context) =>
         context.Message is { Chat.Type: ChatType.Private, Text: string text }
         && text.StartsWith(Trigger, StringComparison.OrdinalIgnoreCase);
 

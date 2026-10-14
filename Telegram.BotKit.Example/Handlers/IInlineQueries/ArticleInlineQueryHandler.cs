@@ -3,7 +3,7 @@ using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
 
-namespace Telegram.BotKit.Example.Handlers.IInlineQueries;
+namespace Telegram.BotKit.Example.Handlers.InlineQueries;
 
 internal sealed class ArticleInlineQueryHandler : IInlineQueryHandler
 {
@@ -21,7 +21,7 @@ internal sealed class ArticleInlineQueryHandler : IInlineQueryHandler
             )
         };
 
-        // Запрос содержит чувствительные данные юзера, помечаем как IsPersonal
+        // query contains sensitive user data, marked as personal
         return Task.FromResult(new InlineQueryBatch(results, isPersonal: true, cacheTime: 60));
     }
 }
