@@ -1,59 +1,72 @@
-# Telegram.BotKit Developer Manual & Reference 🚀
+# Telegram.BotKit Example & Reference Guide
 
-A comprehensive guide demonstrating the capabilities, routing mechanics, parameter-binding, and stateful dialog architecture of the framework.
-
----
-
-## ▶️ How to Run the Example Project
-
-The example project comes pre-configured with sample handlers and pipelines.
-
-1. Open `appsettings.json`.
-2. Insert your bot token inside the `TelegramBot` configuration block:
-   ```json
-   {
-     "TelegramBot": {
-       "Token": "YOUR_BOT_TOKEN_HERE"
-     }
-   }
-   ```
-3. Run the project from your terminal:
-   ```bash
-   dotnet run
-   ```
+Usage examples and reference for routing, handlers, middleware pipelines, and conversational state.
 
 ---
 
-## 🛠 Unified Registration & Routing (`Program.cs`)
+## ⚙️ Configuration (`appsettings.json`)
 
-This is what the application's entry point looks like. You **must** register an implementation of `IUpdateHandler` (provided by the `Telegram.Bot` library) in your DI container. This handler is injected into the background services to dispatch raw updates into the framework's specific pipelines.
+```json
+{
+  "TelegramBot": {
+    "Token": "YOUR_BOT_TOKEN_HERE",
+    "Mode": "Polling",
+    "AllowedUpdates": [ "Message", "CallbackQuery", "InlineQuery", "ChosenInlineResult" ],
+    "WebhookUrl": "https://your-domain.com/api/bot",
+    "SecretToken": "optional-secret-token",
+    "DropPendingUpdates": false
+  }
+}
+```
+
+> **ChosenInlineResult:** Telegram disables `chosen_inline_result` updates by default. Enable via [@BotFather](https://t.me/BotFather):
+> `/mybots` -> select bot -> **Bot Settings** -> **Inline Feedback** -> set to `100%`.
+
+---
+
+## 🛠 Setup & Registration (`Program.cs`)
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Polling;
 using Telegram.BotKit.Hosting;
 using MyBot.Handlers;
+using MyBot.Middlewares;
 
 var builder = BotApplication.CreateBuilder(args);
 
-// 1. Register Pipelines (automatically scans the calling assembly for handlers)
-builder.Services
-    .AddCommands()
-    .AddCallbacks()
-    .AddMessages()
-    .AddInlineQueries()
-    .AddChosenInlineResults();
+builder.Services.AddCommands(pipeline =>
+{
+    pipeline.UseMiddleware<CommandLoggingMiddleware>();
+    pipeline.UseRouting();
+});
 
-// 2. Register your custom Update Handler (Crucial for routing raw updates to dispatchers)
+builder.Services.AddCallbacks();
+
+builder.Services.AddInlineQueries(pipeline =>
+{
+    pipeline.UseRouting();
+    pipeline.UseAnswer<LoggingInlineQueryAnswerMiddleware>();
+});
+
+builder.Services.AddChosenInlineResults();
+
+builder.Services.AddMessages(pipeline =>
+{
+    pipeline.UseMiddleware<UserStateMiddleware>();
+    pipeline.UseRouting();
+});
+
 builder.Services.AddSingleton<IUpdateHandler, BotUpdateHandler>();
 
 var app = builder.Build();
 await app.RunAsync();
 ```
 
-### Reference: Minimal `BotUpdateHandler` Implementation
+---
 
-Your update handler acts as a traffic router. It determines which dispatcher should process the incoming update based on its type.
+## 🚦 Update Dispatcher (`IUpdateHandler`)
+
+Dispatches raw Telegram updates to framework dispatchers:
 
 ```csharp
 using Telegram.Bot;
@@ -72,39 +85,42 @@ public sealed class BotUpdateHandler(
     ICallbackDispatcher callbackDispatcher,
     IMessageDispatcher messageDispatcher,
     IInlineQueryDispatcher inlineQueryDispatcher,
-    IChosenInlineResultDispatcher chosenInlineResultDispatcher
-    ) : IUpdateHandler
+    IChosenInlineResultDispatcher chosenInlineResultDispatcher,
+    ILogger<BotUpdateHandler> logger
+) : IUpdateHandler
 {
     public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
-        if (update.Message is { } message)
+        switch (update)
         {
-            if (message.Text is { } text && text.StartsWith('/'))
-            {
+            case { CallbackQuery: { } callback }:
+                await callbackDispatcher.DispatchAsync(callback, cancellationToken);
+                break;
+
+            case { Message: { Text: string text } message } when text.StartsWith('/'):
                 await commandDispatcher.DispatchAsync(message, cancellationToken);
-            }
-            else
-            {
+                break;
+
+            case { Message: { } message }:
                 await messageDispatcher.DispatchAsync(message, cancellationToken);
-            }
-        }
-        else if (update.CallbackQuery is { } callbackQuery)
-        {
-            await callbackDispatcher.DispatchAsync(callbackQuery, cancellationToken);
-        }
-        else if (update.InlineQuery is { } inlineQuery)
-        {
-            await inlineQueryDispatcher.DispatchAsync(inlineQuery, cancellationToken);
-        }
-        else if (update.ChosenInlineResult is { } chosenResult)
-        {
-            await chosenInlineResultDispatcher.DispatchAsync(chosenResult, cancellationToken);
+                break;
+
+            case { InlineQuery: { } inlineQuery }:
+                await inlineQueryDispatcher.DispatchAsync(inlineQuery, cancellationToken);
+                break;
+
+            case { ChosenInlineResult: { } chosenResult }:
+                await chosenInlineResultDispatcher.DispatchAsync(chosenResult, cancellationToken);
+                break;
+
+            default:
+                break;
         }
     }
 
     public Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, HandleErrorSource source, CancellationToken cancellationToken)
     {
-        // Handle global network or API errors here
+        logger.LogError(exception, "Update error from source: {Source}", source);
         return Task.CompletedTask;
     }
 }
@@ -112,41 +128,42 @@ public sealed class BotUpdateHandler(
 
 ---
 
-## 💬 Creating a Command (`ICommandHandler`)
+## 💬 Commands (`ICommandHandler`)
 
-Configure a parameter model and declare your command trigger.
-
-### 1. Define the DTO (Parameters)
-
-Describe the positional or named arguments your command accepts. If your command does not accept parameters, simply use the built-in `EmptyCommandParams`.
+### 1. Parameter Model
 
 ```csharp
 using Telegram.BotKit.Commands.Attributes;
 
-public record PingCommandParams
-{
-    // Required positional argument (index 0). Example: /ping "Hello"
-    [CommandParam(Position = 0, Required = true)] 
-    public string? Message { get; init; } 
+namespace MyBot.Models;
 
-    // Optional named argument. Example: /ping c=5
+public sealed record PingCommandParams
+{
+    // positional argument: /ping "hello world"
+    [CommandParam(Position = 0, Required = true)]
+    public string? Message { get; init; }
+
+    // named argument: /ping c=5
     [CommandParam(Name = "c")]
     public int? Count { get; init; }
 }
 ```
 
-### 2. Create the Handler
-
-Implement the handler logic using `ICommandHandler<TParams>`.
+### 2. Command Handler
 
 ```csharp
 using Telegram.Bot;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Models;
+using MyBot.Models;
 
-public class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCommandParams>
+namespace MyBot.Handlers;
+
+public sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCommandParams>
 {
     public static string Command => "ping";
+
+    public static string[] Aliases => ["p", "check"];
 
     public async Task HandleAsync(PingCommandParams parameters, CommandContext context, CancellationToken cancellationToken)
     {
@@ -160,22 +177,24 @@ public class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCo
 }
 ```
 
+> For parameterless commands use `ICommandHandler<EmptyCommandParams>`.
+
 ---
 
-## 🔘 Creating a Callback (`ICallbackHandler`)
+## 🔘 Inline Callbacks (`ICallbackHandler`)
 
-Map query parameters from inline keyboards safely and transparently into strongly-typed handlers. If no parameters are needed, use `EmptyCallbackParams`.
+Maps query parameters from `callback_data` (e.g. `example:ping?m=test&c=1`).
 
-### 1. Define the DTO
-
-Use standard JSON attribute overrides to keep payload keys compact inside Telegram's 64-byte callback limit.
+### 1. Parameter Model
 
 ```csharp
 using System.Text.Json.Serialization;
 
-public record PingCallbackParams
+namespace MyBot.Models;
+
+public sealed record PingCallbackParams
 {
-    [JsonPropertyName("m")] 
+    [JsonPropertyName("m")]
     public string? Message { get; init; }
 
     [JsonPropertyName("c")]
@@ -183,24 +202,25 @@ public record PingCallbackParams
 }
 ```
 
-### 2. Create the Handler
-
-Implement the handler logic using `ICallbackHandler<TParams>`.
+### 2. Callback Handler
 
 ```csharp
 using Telegram.Bot;
-using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Callbacks.Abstractions;
 using Telegram.BotKit.Callbacks.Models;
+using MyBot.Models;
 
-public class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandler<PingCallbackParams>
+namespace MyBot.Handlers;
+
+public sealed class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandler<PingCallbackParams>
 {
-    public static string Key => "example:ping"; // Matches callback data format like example:ping?m=text&c=5
+    public static string Key => "example:ping";
 
     public async Task HandleAsync(PingCallbackParams parameters, CallbackContext context, CancellationToken cancellationToken)
     {
         await bot.AnswerCallbackQuery(
             callbackQueryId: context.Query.Id,
-            text: $"Callback received! Msg: {parameters.Message}",
+            text: $"Callback received: {parameters.Message}",
             showAlert: true,
             cancellationToken: cancellationToken
         );
@@ -208,11 +228,11 @@ public class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandler<Ping
 }
 ```
 
+> For buttons without parameters use `ICallbackHandler<EmptyCallbackParams>`.
+
 ---
 
-## 🔍 Creating an Inline Query (`IInlineQueryHandler`)
-
-Respond to structured inline queries entered by users inside any conversation thread. Match and process queries dynamically inside the `CanHandle` block.
+## 🔍 Inline Queries (`IInlineQueryHandler`)
 
 ```csharp
 using Telegram.Bot.Types;
@@ -220,49 +240,83 @@ using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
 
-public class SearchInlineQueryHandler : IInlineQueryHandler
+namespace MyBot.Handlers;
+
+public sealed class SearchInlineQueryHandler : IInlineQueryHandler
 {
-    // Match queries starting with "search" (e.g. "@YourBot search keyword")
     public bool CanHandle(InlineQuery query) =>
         query.Query.StartsWith("search", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<InlineQueryBatch> HandleAsync(InlineQueryContext context, CancellationToken cancellationToken)
+    public Task<InlineQueryBatch> HandleAsync(InlineQueryContext context, CancellationToken cancellationToken)
     {
-        var searchText = context.Query.Query["search".Length..].Trim();
+        var keyword = context.Query.Query["search".Length..].Trim();
 
         var results = new InlineQueryResult[]
         {
             new InlineQueryResultArticle(
                 id: "1",
-                title: $"Result: {searchText}",
-                inputMessageContent: new InputTextMessageContent($"Selected search keyword: {searchText}")
+                title: $"Result: {keyword}",
+                inputMessageContent: new InputTextMessageContent($"Selected: {keyword}")
             )
         };
 
-        return new InlineQueryBatch(results, isPersonal: true, cacheTime: 300);
+        return Task.FromResult(new InlineQueryBatch(results, isPersonal: true, cacheTime: 300));
+    }
+}
+```
+
+### Answer Middleware (`IInlineQueryAnswerMiddleware`)
+
+Intercepts or inspects results before sending to Telegram:
+
+```csharp
+using Telegram.Bot;
+using Telegram.BotKit.InlineQueries.Middlewares;
+using Telegram.BotKit.InlineQueries.Models;
+
+namespace MyBot.Middlewares;
+
+public sealed class LoggingInlineQueryAnswerMiddleware(
+    ITelegramBotClient botClient,
+    ILogger<LoggingInlineQueryAnswerMiddleware> logger
+) : DefaultInlineQueryAnswerMiddleware(botClient, logger)
+{
+    protected override async Task SendAnswerAsync(InlineQueryContext context, CancellationToken cancellationToken)
+    {
+        logger.LogInformation("Answering query {QueryId} with {Count} results",
+            context.Query.Id, context.Results.Count);
+
+        await base.SendAnswerAsync(context, cancellationToken);
     }
 }
 ```
 
 ---
 
-## 🎯 Creating a Chosen Inline Result Handler (`IChosenInlineResultHandler`)
+## 🎯 Chosen Inline Results (`IChosenInlineResultHandler`)
 
-Receive notifications when a user selects one of your inline search results. Useful for analytics, caching, or updating previously sent messages.
+Evaluates `CanHandle` statically before instantiating the handler from DI:
 
 ```csharp
 using Telegram.Bot.Types;
 using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
 
-public class ResultSelectedHandler : IChosenInlineResultHandler
+namespace MyBot.Handlers;
+
+public sealed class ArticleChosenInlineResultHandler(
+    ILogger<ArticleChosenInlineResultHandler> logger
+) : IChosenInlineResultHandler
 {
-    public bool CanHandle(ChosenInlineResult chosenResult) =>
-        chosenResult.ResultId.StartsWith("res_");
+    public static bool CanHandle(ChosenInlineResult chosenResult) =>
+        chosenResult.ResultId.StartsWith("article_", StringComparison.OrdinalIgnoreCase);
 
     public Task HandleAsync(ChosenInlineResultContext context, CancellationToken cancellationToken)
     {
-        // Handle result selection (e.g., track statistics or edit message)
+        logger.LogInformation("User {UserId} selected {ResultId}",
+            context.Result.From.Id,
+            context.Result.ResultId);
+
         return Task.CompletedTask;
     }
 }
@@ -270,93 +324,21 @@ public class ResultSelectedHandler : IChosenInlineResultHandler
 
 ---
 
-## ✉️ Creating Message Handlers (`IMessageHandler`)
+## ✉️ Message Handlers & Conversational States
 
-Message handlers process plain text, media, or service events. They can be registered as global handlers or bound to a specific conversational state.
+```
+[ User sends "/setage" ] ──> Command sets state "awaiting_age"
+                                       │
+[ User sends "25" ]      ──> UserStateMiddleware sets context.UserState = "awaiting_age"
+                                       │
+                             Router executes handler with RequiredState == "awaiting_age"
+```
 
-### 1. Global Message Handler
-
-Global handlers have no state constraints (`RequiredState => null`) and process messages matching custom predicate criteria.
+### 1. State Storage Abstraction
 
 ```csharp
-using Telegram.Bot;
-using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Messages.Abstractions;
-using Telegram.BotKit.Messages.Models;
+namespace MyBot.Services;
 
-public sealed class SimpleStickerHandler(ITelegramBotClient bot) : IMessageHandler
-{
-    // Runs regardless of the active user state
-    public static string? RequiredState => null;
-
-    // Restricts handling to sticker messages sent in private chats
-    public bool CanHandle(MessageContext context) =>
-        context.Message is { Chat.Type: ChatType.Private, Sticker: { } };
-
-    public async Task HandleAsync(MessageContext context, CancellationToken cancellationToken)
-    {
-        await bot.SendSticker(
-            chatId: context.Message.Chat.Id,
-            sticker: InputFile.FromFileId(context.Message.Sticker!.FileId),
-            cancellationToken: cancellationToken
-        );
-    }
-}
-```
-
-### 2. State-Bound Message Handler
-
-Stateful handlers only execute if the framework's state middleware resolves a user state matching `RequiredState`.
-
-```csharp
-using Telegram.Bot;
-using Telegram.BotKit.Messages.Abstractions;
-using Telegram.BotKit.Messages.Models;
-
-public sealed class AgeInputHandler(IStateStorage stateStorage, ITelegramBotClient bot) : IMessageHandler
-{
-    // Active only if the state middleware resolved user state as "awaiting_age"
-    public static string? RequiredState => "awaiting_age";
-
-    public bool CanHandle(MessageContext context) =>
-        !string.IsNullOrWhiteSpace(context.Message.Text);
-
-    public async Task HandleAsync(MessageContext context, CancellationToken cancellationToken)
-    {
-        var input = context.Message.Text!;
-        var userId = context.Message.From!.Id;
-
-        if (int.TryParse(input, out var age))
-        {
-            // Save valid input and clear the conversational state
-            await stateStorage.SetStateAsync(userId, null);
-            await bot.SendMessage(userId, $"Age saved: {age}!", cancellationToken: cancellationToken);
-        }
-        else
-        {
-            // Validation failed: keep state active and prompt again
-            await bot.SendMessage(userId, "Please enter a valid number:", cancellationToken: cancellationToken);
-        }
-    }
-}
-```
-
----
-
-## 🔄 Stateful Dialogs (FSM / Wizard Flow Setup)
-
-A common bot pattern: a user triggers a flow (e.g., types `/setage`), the system expects a text answer next, and we route that specific text to a designated state-bound handler.
-
-```
-[ User sends "/setage" ] ──> CommandHandler updates State to "awaiting_age" in Cache/DB
-                                        │
-[ User sends "25" ]      ──> UserStateMiddleware loads "awaiting_age" -> Assigns to context.UserState
-                                        │
-                             Router matches handler with RequiredState == "awaiting_age"
-```
-
-### Step 1: Create State Storage Abstraction
-```csharp
 public interface IStateStorage
 {
     Task<string?> GetStateAsync(long userId);
@@ -364,57 +346,51 @@ public interface IStateStorage
 }
 ```
 
-### Step 2: Implement State Resolving Middleware
-Before routing standard messages, this middleware fetches the current state of the sender and assigns it to `context.UserState`.
+### 2. State Middleware
 
 ```csharp
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
 using Telegram.BotKit.Shared;
+using MyBot.Services;
 
 namespace MyBot.Middlewares;
 
 public sealed class UserStateMiddleware(IStateStorage stateStorage) : IMessageMiddleware
 {
-    public async Task InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public async ValueTask InvokeAsync(MessageContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         var userId = context.Message.From?.Id;
         if (userId is not null)
         {
             context.UserState = await stateStorage.GetStateAsync(userId.Value);
         }
+
         await next();
     }
 }
 ```
 
-### Step 3: Register Middleware Before Routing in `Program.cs`
-```csharp
-builder.Services.AddMessages(pipeline =>
-{
-    // 1. Resolve and assign context.UserState before routing decisions
-    pipeline.UseMiddleware<UserStateMiddleware>();
+### 3. Setting State in a Command
 
-    // 2. Perform state-aware handler routing
-    pipeline.UseRouting();
-});
-```
-
-### Step 4: Trigger Conversation State in Command
 ```csharp
 using Telegram.Bot;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Models;
+using MyBot.Services;
 
-public sealed class SetAgeCommandHandler(IStateStorage stateStorage, ITelegramBotClient bot) : ICommandHandler<EmptyCommandParams>
+namespace MyBot.Handlers;
+
+public sealed class SetAgeCommandHandler(
+    IStateStorage stateStorage,
+    ITelegramBotClient bot
+) : ICommandHandler<EmptyCommandParams>
 {
     public static string Command => "setage";
 
     public async Task HandleAsync(EmptyCommandParams parameters, CommandContext context, CancellationToken cancellationToken)
     {
         var userId = context.Message.From!.Id;
-
-        // Set state to trigger the stateful handler on the next user text update
         await stateStorage.SetStateAsync(userId, "awaiting_age");
 
         await bot.SendMessage(
@@ -427,5 +403,70 @@ public sealed class SetAgeCommandHandler(IStateStorage stateStorage, ITelegramBo
 }
 ```
 
-### Step 5: Handle State Input and Reset (FSM Exit)
-Implement the message handler with `RequiredState => "awaiting_age"` (as shown in the **Message Handlers** section above) to validate the input, save it, and then call `await stateStorage.SetStateAsync(userId, null)` to exit the state flow.
+### 4. State-Bound Message Handler
+
+```csharp
+using Telegram.Bot;
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
+using MyBot.Services;
+
+namespace MyBot.Handlers;
+
+public sealed class AgeInputMessageHandler(
+    IStateStorage stateStorage,
+    ITelegramBotClient bot
+) : IMessageHandler
+{
+    public static string? RequiredState => "awaiting_age";
+
+    public static bool CanHandle(MessageContext context) =>
+        !string.IsNullOrWhiteSpace(context.Message.Text);
+
+    public async Task HandleAsync(MessageContext context, CancellationToken cancellationToken)
+    {
+        var input = context.Message.Text!;
+        var userId = context.Message.From!.Id;
+
+        if (int.TryParse(input, out var age))
+        {
+            await stateStorage.SetStateAsync(userId, null);
+            await bot.SendMessage(userId, $"Age saved: {age}!", cancellationToken: cancellationToken);
+            return;
+        }
+
+        await bot.SendMessage(userId, "Please enter a valid number:", cancellationToken: cancellationToken);
+    }
+}
+```
+
+### 5. Global Message Handler (Fallback)
+
+Executes when no state-bound handler matches:
+
+```csharp
+using Telegram.Bot;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
+
+namespace MyBot.Handlers;
+
+public sealed class EchoStickerMessageHandler(ITelegramBotClient bot) : IMessageHandler
+{
+    public static string? RequiredState => null;
+
+    public static bool CanHandle(MessageContext context) =>
+        context.Message is { Chat.Type: ChatType.Private, Sticker: not null };
+
+    public async Task HandleAsync(MessageContext context, CancellationToken cancellationToken)
+    {
+        await bot.SendSticker(
+            chatId: context.Message.Chat.Id,
+            sticker: InputFile.FromFileId(context.Message.Sticker!.FileId),
+            cancellationToken: cancellationToken
+        );
+    }
+}
+```

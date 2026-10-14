@@ -3,102 +3,95 @@
   <a href="https://www.nuget.org/packages/Telegram.BotKit"><img src="https://img.shields.io/nuget/v/Telegram.BotKit.svg" alt="NuGet Version" /></a>
 </p>
 
-**A structured, extensible .NET 10 framework for building Telegram bots.**
-
-Built on top of the popular [Telegram.Bot](https://github.com/TelegramBots/Telegram.Bot) library, adopting ASP.NET Core principles: Dependency Injection, strong typing, and highly customizable, modular middleware pipelines.
+A structured .NET 10 framework for building Telegram bots on top of [Telegram.Bot](https://github.com/TelegramBots/Telegram.Bot), using dependency injection, strong typing, and middleware pipelines.
 
 ---
 
 ## 🏗 Architecture
 
-The framework decouples input parsing, routing, and processing. Every incoming update flows through an isolated, scoped execution pipeline:
+Each incoming update is routed through an isolated execution pipeline:
 
 ```mermaid
 graph TD
     Update[Telegram Update] --> Handler{Update Handler}
-    
+
     %% Command Flow
     Handler -- "Message starts with /" --> CmdDisp[Command Dispatcher]
-    CmdDisp --> CmdPipe[Pipeline: User Middlewares? -> Routing -> User Middlewares? -> Execution]
+    CmdDisp --> CmdPipe[Pipeline: Middlewares -> Routing -> Execution]
     CmdPipe --> CmdRouter[Command Routing Middleware]
-    CmdRouter -- "Direct lookup" --> CmdReg{CommandHandlerRegistry}
-    CmdReg -- "Uses precompiled CommandSearcher" --> CmdInvoker[Command Invoker]
-    CmdInvoker -- "ParameterBinderBase (cached metadata)" --> CmdHandler[ICommandHandler]
-    
+    CmdRouter --> CmdReg[CommandHandlerRegistry]
+    CmdReg --> CmdHandler[ICommandHandler]
+
     %% Callback Flow
     Handler -- Callback Query --> CbkDisp[Callback Dispatcher]
-    CbkDisp --> CbkPipe[Pipeline: User Middlewares? -> Routing -> User Middlewares? -> Execution]
+    CbkDisp --> CbkPipe[Pipeline: Middlewares -> Routing -> Execution]
     CbkPipe --> CbkRouter[Callback Routing Middleware]
-    CbkRouter -- "Direct lookup" --> CbkReg{CallbackHandlerRegistry}
-    CbkReg --> CbkInvoker[Callback Invoker]
-    CbkInvoker -- "CallbackParameterBinder (cached properties)" --> CbkHandler[ICallbackHandler]
+    CbkRouter --> CbkReg[CallbackHandlerRegistry]
+    CbkReg --> CbkHandler[ICallbackHandler]
 
     %% Inline Query Flow
     Handler -- Inline Query --> InlDisp[Inline Query Dispatcher]
-    InlDisp --> InlPipe[Pipeline: User Middlewares? -> Routing]
+    InlDisp --> InlPipe[Pipeline: Middlewares -> Routing -> Answer]
     InlPipe --> InlRouter[Inline Query Routing Middleware]
-    InlRouter -- "Evaluates CanHandle" --> InlExec{Handler Match Count}
-    InlExec -- "Single match (Hot path)" --> InlDirect[Direct execution without tasks]
-    InlExec -- "Multiple matches" --> InlParallel[Parallel concurrent execution]
-    InlDirect --> InlHandler[IInlineQueryHandler]
-    InlParallel --> InlHandler
+    InlRouter --> InlHandler[IInlineQueryHandler]
 
     %% Chosen Inline Result Flow
     Handler -- Chosen Inline Result --> ChoDisp[Chosen Inline Result Dispatcher]
-    ChoDisp --> ChoPipe[Pipeline: User Middlewares? -> Routing -> Execution]
+    ChoDisp --> ChoPipe[Pipeline: Middlewares -> Routing -> Execution]
     ChoPipe --> ChoRouter[Chosen Inline Result Routing Middleware]
-    ChoRouter --> ChoHandler[IChosenInlineResultHandler]
+    ChoRouter --> ChoReg[ChosenInlineResultHandlerRegistry]
+    ChoReg --> ChoHandler[IChosenInlineResultHandler]
 
     %% Message Flow
     Handler -- Regular Message --> MsgDisp[Message Dispatcher]
-    MsgDisp --> MsgPipe[Pipeline: User State Middleware? -> Routing -> User Middlewares? -> Execution]
+    MsgDisp --> MsgPipe[Pipeline: Middlewares -> Routing -> Execution]
     MsgPipe --> MsgRouter[Message Routing Middleware]
-    MsgRouter -- "State-specific lookup" --> MsgReg{MessageHandlerRegistry}
+    MsgRouter --> MsgReg[MessageHandlerRegistry]
     MsgReg --> MsgHandler[IMessageHandler]
 ```
----
-
-## ✨ Key Features
-
-*   **🧠 Typo Correction:** Precompiled Command Searcher powered by the **Damerau-Levenshtein** algorithm to suggest the closest registered commands to users.
-*   **🛠 Strongly-Typed Parameter Binding:** Automatic mapping of URL-like query strings (`action?id=12`) and space-separated parameters into your custom DTOs.
-*   **🚇 Modular Middleware Pipelines:** Separate, highly configurable pipelines for Commands, Callbacks, Inline Queries, Chosen Inline Results, and standard Messages. 
-*   **🎯 Scoped Dependency Resolution:** Resolves **only the matched handler** per request instead of instantiating the entire handler collection, optimizing memory and DI lifetimes.
-*   **🌐 Flexible Hosting Modes:** Automatically configures Long Polling or secure Webhook deployments. In Webhook mode, endpoints validate secret token headers and are dynamically mapped using ASP.NET Core Minimal APIs.
 
 ---
 
-## 🚀 Quick Start (Long Polling & Webhook)
+## ✨ Features
 
-### 1. Install NuGet Package
+* **Parameter Binding:** Maps command arguments and callback query strings (`action?id=12`) directly to typed models.
+* **Typo Suggestions:** Suggests similar registered commands when an unknown command is received.
+* **Modular Pipelines:** Configurable middleware pipelines for Commands, Callbacks, Messages, Inline Queries, and Chosen Inline Results.
+* **State Routing:** Message routing based on dialog states (`RequiredState`) with fallback to global handlers.
+* **Hosting Modes:** Polling and Webhook modes configured via options.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Install Package
+
 ```bash
 dotnet add package Telegram.BotKit
 ```
 
 ### 2. Configure Settings (`appsettings.json`)
-The framework automatically chooses between Polling and Webhook modes based on the `Mode` setting.
+
 ```json
 {
   "TelegramBot": {
     "Token": "YOUR_BOT_TOKEN_HERE",
     "AllowedUpdates": [ "Message", "CallbackQuery", "InlineQuery", "ChosenInlineResult" ],
-    "Mode": "Polling", // Or "Webhook"
-    "WebhookUrl": "https://your-domain.com/api/bot", // Required for Webhook mode
-    "SecretToken": "your_secure_secret_token" // Optional, recommended for Webhook security
+    "Mode": "Polling",
+    "WebhookUrl": "https://your-domain.com/api/bot",
+    "SecretToken": "your_secure_secret_token"
   }
 }
 ```
 
-### 3. Initialize the Application (`Program.cs`)
+### 3. Application Setup (`Program.cs`)
+
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Polling;
 using Telegram.BotKit.Hosting;
-using MyBot.Handlers;
 
 var builder = BotApplication.CreateBuilder(args);
 
-// Simple default setup - scans the calling assembly and sets up default pipelines
 builder.Services
     .AddCommands()
     .AddCallbacks()
@@ -114,33 +107,35 @@ await app.RunAsync();
 
 ---
 
-## 🚇 Pipeline Customization
+## 🚇 Pipeline Configuration
 
-You can explicitly control the execution order of the pipelines. This is useful when you want to run global middlewares **before** routing occurs (e.g., logging or rate-limiting) and other middlewares **after** routing (e.g., role-based access validation based on matched handler metadata).
+Middleware order is explicit. Middlewares added before `UseRouting()` execute for every update; middlewares added after execute only when a matching handler is found:
 
 ```csharp
 builder.Services.AddCommands(pipeline =>
 {
-    // 1. Run global logging for all incoming command attempts
+    // runs for all command attempts
     pipeline.UseMiddleware<CommandLoggingMiddleware>();
 
-    // 2. Route the command (matches input to a concrete ICommandHandler)
+    // matches the command against registered handlers
     pipeline.UseRouting();
 
-    // 3. Run middleware only for recognized commands (e.g., ensure user is an administrator)
+    // runs only when a handler matched
     pipeline.UseMiddleware<AdminOnlyMiddleware>();
+});
+
+builder.Services.AddInlineQueries(pipeline =>
+{
+    pipeline.UseMiddleware<CustomInlineQueryErrorHandler>();
+    pipeline.UseRouting();
+    pipeline.UseAnswer<LoggingInlineQueryAnswerMiddleware>();
 });
 ```
 
 ---
 
-## 📖 Detailed Reference & Code Examples
+## 📖 Examples
 
-For full implementation examples, including:
-* Writing strongly-typed **Commands** & **Callbacks**
-* Handling raw **Messages**
-* Implementing **Stateful Dialogs (Finite State Machine / Wizard Flows)**
-* Processing **Inline Queries** and **Chosen Inline Results**
-* Implementing a custom **Update Handler**
+See the implementation examples for commands, callbacks, state-based messages, inline queries, and error handling:
 
-👉 **Check out the [📂 Telegram.BotKit.Example Documentation](Telegram.BotKit.Example/README.md)**
+[Telegram.BotKit.Example Documentation](Telegram.BotKit.Example/README.md)
