@@ -78,7 +78,6 @@ public sealed class BotBuilder
                 EnvironmentName = envName
             };
             _webBuilder = WebApplication.CreateBuilder(webOptions);
-            _webBuilder.Services.AddHostedService<WebhookStartupService>();
         }
         else
         {
@@ -88,10 +87,20 @@ public sealed class BotBuilder
                 EnvironmentName = envName
             };
             _hostBuilder = Host.CreateApplicationBuilder(hostOptions);
-            _hostBuilder.Services.AddHostedService<PollingService>();
         }
 
+        // options (validated on start) are registered before the hosted services, so invalid
+        // configuration fails the host before the bot tries to connect to Telegram
         Services.AddTelegramBotFramework(Configuration);
+
+        if (_mode is BotMode.Webhook)
+        {
+            Services.AddHostedService<WebhookStartupService>();
+        }
+        else
+        {
+            Services.AddHostedService<PollingService>();
+        }
     }
 
     /// <summary>

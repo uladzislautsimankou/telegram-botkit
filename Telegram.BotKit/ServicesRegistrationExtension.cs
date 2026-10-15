@@ -7,6 +7,9 @@ using Telegram.BotKit.Shared.Converters;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
+/// <summary>
+/// Registers the framework services of the bot host in the dependency injection container.
+/// </summary>
 internal static class ServicesRegistrationExtension
 {
     /// <summary>
@@ -18,10 +21,18 @@ internal static class ServicesRegistrationExtension
     public static IServiceCollection AddTelegramBotFramework(this IServiceCollection services, IConfiguration configuration)
     {
         // bind and configure telegram bot options
-        services.Configure<TelegramBotOptions>(configuration.GetSection(TelegramBotOptions.SectionName));
+        services.AddOptions<TelegramBotOptions>()
+            .Bind(configuration.GetSection(TelegramBotOptions.SectionName))
+            .ValidateOnStart();
 
-        // register the typed telegram bot client with a dedicated HTTP client
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<TelegramBotOptions>, TelegramBotOptionsValidator>());
+
+        // register the typed telegram bot client with a dedicated HTTP client;
+        // the Bot API URL contains the token ("/bot<token>/method"), so the default HttpClient request logging
+        // (which prints the full URL at Information level) would write the token to the logs
         services.AddHttpClient("tg_client")
+            .RemoveAllLoggers()
             .AddTypedClient<ITelegramBotClient>((httpClient, sp) =>
             {
                 var opts = sp.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
