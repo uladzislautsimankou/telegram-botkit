@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Shared.Exceptions;
+namespace Telegram.BotKit.Shared.Exceptions;
 
 /// <summary>
 /// Represents the base class for all exceptions thrown within the Telegram.BotKit framework.

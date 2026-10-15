@@ -1,4 +1,4 @@
-﻿using Telegram.Bot.Types;
+using Telegram.Bot.Types;
 using Telegram.BotKit.Messages.Abstractions;
 
 namespace Telegram.BotKit.Messages.Models;

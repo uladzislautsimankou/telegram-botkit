@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Callbacks.Binding;
 using Telegram.BotKit.Callbacks.Models;

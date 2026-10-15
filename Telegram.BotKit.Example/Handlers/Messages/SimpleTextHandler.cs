@@ -1,4 +1,4 @@
-﻿using Telegram.Bot;
+using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
@@ -24,7 +24,9 @@ internal sealed class SimpleTextHandler(ITelegramBotClient bot) : IMessageHandle
         var replyText = text[Trigger.Length..].Trim();
 
         if (string.IsNullOrWhiteSpace(replyText))
+        {
             replyText = "You didn't say anything";
+        }
 
         await bot.SendMessage(
             chatId: context.Message.Chat.Id,

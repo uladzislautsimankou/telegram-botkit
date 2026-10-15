@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Shared.Pipeline;
+namespace Telegram.BotKit.Shared.Pipeline;
 
 /// <summary>
 /// Specifies the classification of a pipeline execution step.

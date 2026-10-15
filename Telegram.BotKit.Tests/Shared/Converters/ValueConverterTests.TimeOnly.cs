@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 
 namespace Telegram.BotKit.Tests.Shared.Converters;
 

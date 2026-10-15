@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 
 namespace Telegram.BotKit.Shared.Converters.Strategies;
 

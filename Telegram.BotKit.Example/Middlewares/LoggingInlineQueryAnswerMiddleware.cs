@@ -1,4 +1,4 @@
-﻿using Telegram.Bot;
+using Telegram.Bot;
 using Telegram.BotKit.InlineQueries.Middlewares;
 using Telegram.BotKit.InlineQueries.Models;
 

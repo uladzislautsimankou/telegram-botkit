@@ -1,5 +1,5 @@
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Telegram.BotKit.Commands;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Binding;
@@ -133,7 +133,9 @@ public static class CommandServiceCollectionExtensions
         {
             var type = allTypes[i];
             if (type.IsAbstract || type.IsInterface)
+            {
                 continue;
+            }
 
             var implementsInterface = type.GetInterfaces()
                 .Any(it => it.IsGenericType && it.GetGenericTypeDefinition() == genericInterfaceType);

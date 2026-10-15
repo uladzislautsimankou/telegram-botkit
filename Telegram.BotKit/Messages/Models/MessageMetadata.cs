@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Messages.Models;
+namespace Telegram.BotKit.Messages.Models;
 
 /// <summary>
 /// Encapsulates runtime metadata about the matched message handler.

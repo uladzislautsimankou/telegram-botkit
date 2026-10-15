@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Shared.Exceptions;
+using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Hosting;
 

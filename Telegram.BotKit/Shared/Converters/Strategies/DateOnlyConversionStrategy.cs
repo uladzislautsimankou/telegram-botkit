@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 
 namespace Telegram.BotKit.Shared.Converters.Strategies;
 

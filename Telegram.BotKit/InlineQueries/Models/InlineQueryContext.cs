@@ -1,4 +1,4 @@
-﻿using Telegram.Bot.Types;
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.InlineQueryResults;
 
 namespace Telegram.BotKit.InlineQueries.Models;
@@ -77,7 +77,11 @@ public sealed class InlineQueryContext
     /// </summary>
     public bool IsPersonal
     {
-        get { lock (_sync) return _isPersonal; }
+        get { lock (_sync)
+            {
+                return _isPersonal;
+            }
+        }
     }
 
     /// <summary>
@@ -85,7 +89,11 @@ public sealed class InlineQueryContext
     /// </summary>
     public int? CacheTime
     {
-        get { lock (_sync) return _cacheTime; }
+        get { lock (_sync)
+            {
+                return _cacheTime;
+            }
+        }
     }
 
     /// <summary>
@@ -93,7 +101,11 @@ public sealed class InlineQueryContext
     /// </summary>
     public string? NextOffset
     {
-        get { lock (_sync) return _nextOffset; }
+        get { lock (_sync)
+            {
+                return _nextOffset;
+            }
+        }
     }
 
     /// <summary>
@@ -101,7 +113,11 @@ public sealed class InlineQueryContext
     /// </summary>
     public InlineQueryResultsButton? Button
     {
-        get { lock (_sync) return _button; }
+        get { lock (_sync)
+            {
+                return _button;
+            }
+        }
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Telegram.BotKit.Callbacks.Parsing;
 
 namespace Telegram.BotKit.Tests.Callbacks;

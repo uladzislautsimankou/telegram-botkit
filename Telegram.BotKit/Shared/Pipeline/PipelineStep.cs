@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Shared.Pipeline;
+namespace Telegram.BotKit.Shared.Pipeline;
 
 /// <summary>
 /// Represents a step inside the middleware pipeline.

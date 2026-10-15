@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Telegram.BotKit.Helpers;
 using Telegram.BotKit.Shared.Exceptions;
 

@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Shared.Converters;
+namespace Telegram.BotKit.Shared.Converters;
 
 /// <summary>
 /// Defines a contract for converting string input into specific target types.

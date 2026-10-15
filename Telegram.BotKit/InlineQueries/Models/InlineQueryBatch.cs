@@ -1,4 +1,4 @@
-﻿using Telegram.Bot.Types.InlineQueryResults;
+using Telegram.Bot.Types.InlineQueryResults;
 
 namespace Telegram.BotKit.InlineQueries.Models;
 

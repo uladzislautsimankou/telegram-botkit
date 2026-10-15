@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Shared.Pipeline;
+namespace Telegram.BotKit.Shared.Pipeline;
 
 /// <summary>
 /// Represents the compiled entry point of an update processing pipeline.

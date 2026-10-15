@@ -1,5 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Telegram.BotKit.Messages;
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;

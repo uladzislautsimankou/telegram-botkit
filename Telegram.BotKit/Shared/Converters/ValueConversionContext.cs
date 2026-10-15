@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Shared.Converters;
+namespace Telegram.BotKit.Shared.Converters;
 
 /// <summary>
 /// Provides contextual information for value conversion.

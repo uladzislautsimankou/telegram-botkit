@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using Telegram.BotKit.Shared.Exceptions;
 
@@ -17,7 +17,9 @@ internal static class ArgumentParser
     public static List<string> ParseArgs(string rawArgs)
     {
         if (string.IsNullOrWhiteSpace(rawArgs))
+        {
             return [];
+        }
 
         var results = new List<string>();
         var span = rawArgs.AsSpan();
@@ -32,7 +34,9 @@ internal static class ArgumentParser
             }
 
             if (i >= span.Length)
+            {
                 break;
+            }
 
             var tokenStart = i;
             var isComplex = false;
@@ -99,7 +103,9 @@ internal static class ArgumentParser
 
                 // normalize typographical quotes
                 if (IsTypographicQuote(c))
+                {
                     c = '"';
+                }
 
                 if (isEscaped)
                 {

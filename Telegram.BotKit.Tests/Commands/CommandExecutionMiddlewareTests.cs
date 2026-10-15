@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Commands.Invocation;

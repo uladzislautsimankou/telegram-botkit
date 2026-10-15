@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Telegram.BotKit.InlineQueries;
 using Telegram.BotKit.InlineQueries.Abstractions;
@@ -38,7 +38,11 @@ public sealed class InlineQueryPipelineBuilder(IServiceCollection services)
     public InlineQueryPipelineBuilder UseAnswer<TMiddleware>()
         where TMiddleware : class, IInlineQueryAnswerMiddleware
     {
-        if (Steps.Any(s => s.Type == PipelineStepType.Execution)) return this;
+        if (Steps.Any(s => s.Type == PipelineStepType.Execution))
+        {
+            return this;
+        }
+
         Services.TryAddTransient<TMiddleware>();
         Steps.Add(new PipelineStep(PipelineStepType.Execution, typeof(TMiddleware)));
         return this;

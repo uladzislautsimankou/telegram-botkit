@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.InlineQueries.Models;
+using Telegram.BotKit.InlineQueries.Models;
 using Telegram.BotKit.Shared;
 
 namespace Telegram.BotKit.InlineQueries.Abstractions;

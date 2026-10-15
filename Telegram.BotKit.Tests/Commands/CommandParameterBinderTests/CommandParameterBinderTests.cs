@@ -1,4 +1,4 @@
-﻿using Telegram.Bot.Types;
+using Telegram.Bot.Types;
 using Telegram.BotKit.Commands.Attributes;
 using Telegram.BotKit.Commands.Binding;
 using Telegram.BotKit.Commands.Models;

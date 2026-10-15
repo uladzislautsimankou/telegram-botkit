@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Reflection;
 using Telegram.BotKit.Shared.Converters;
 using Telegram.BotKit.Shared.Exceptions;
@@ -42,7 +42,9 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
             if (rawValue is null)
             {
                 if (meta.Required)
+                {
                     throw new MissingParameterException(meta.Name ?? meta.PropertyInfo.Name);
+                }
 
                 continue;
             }
@@ -100,7 +102,10 @@ internal abstract class ParameterBinderBase<TAttribute>(IEnumerable<IValueConver
         List<ParamMetadata> allMetadata)
     {
         var key = meta.Name ?? meta.PropertyInfo.Name;
-        if (named.TryGetValue(key, out var namedVal)) return namedVal;
+        if (named.TryGetValue(key, out var namedVal))
+        {
+            return namedVal;
+        }
 
         if (meta.Position >= 0 && positional.Count > 0)
         {

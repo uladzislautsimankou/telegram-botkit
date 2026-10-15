@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Hosting;
+namespace Telegram.BotKit.Hosting;
 
 /// <summary>
 /// Identity metadata for the running Telegram bot.

@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Tests.Commands.CommandParameterBinderTests;

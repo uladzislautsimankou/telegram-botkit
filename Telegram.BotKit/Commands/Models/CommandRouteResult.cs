@@ -33,8 +33,8 @@ public readonly record struct CommandRouteResult
     /// <summary>
     /// Creates a route result indicating that a virtual route failed to resolve.
     /// </summary>
-    public static CommandRouteResult VirtualRouteNotFound() => new() 
-    { 
+    public static CommandRouteResult VirtualRouteNotFound() => new()
+    {
         Status = CommandRouteStatus.VirtualRouteNotFound,
         Suggestions = []
     };

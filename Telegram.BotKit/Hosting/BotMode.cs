@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Hosting;
+namespace Telegram.BotKit.Hosting;
 
 internal enum BotMode
 {

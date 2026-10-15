@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.ChosenInlineResults.Routing;
+namespace Telegram.BotKit.ChosenInlineResults.Routing;
 
 /// <summary>
 /// A registry that stores chosen inline result handler descriptors.

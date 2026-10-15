@@ -10,7 +10,9 @@ internal static class CommandParser
     public static (string Command, string? BotUsername, string RawArgs) ParseHeader(string? input)
     {
         if (string.IsNullOrWhiteSpace(input) || input[0] != '/')
+        {
             return (string.Empty, null, string.Empty);
+        }
 
         // find the first space character
         var span = input.AsSpan();
@@ -40,7 +42,9 @@ internal static class CommandParser
         }
 
         if (fullCommandSpan.IsEmpty)
+        {
             return (string.Empty, null, string.Empty);
+        }
 
         // check if the command targets a specific bot username (e.g., /cmd@botUsername)
         var atIndex = fullCommandSpan.IndexOf('@');

@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Shared;
 

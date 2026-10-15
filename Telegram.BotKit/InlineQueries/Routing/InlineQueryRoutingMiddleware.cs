@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
 using Telegram.BotKit.Shared;
@@ -94,7 +94,10 @@ internal sealed class InlineQueryRoutingMiddleware(
 
     private void ApplyBatch(InlineQueryContext context, InlineQueryBatch? batch, string handlerName)
     {
-        if (batch is null) return;
+        if (batch is null)
+        {
+            return;
+        }
 
         if (batch.Results is not null)
         {

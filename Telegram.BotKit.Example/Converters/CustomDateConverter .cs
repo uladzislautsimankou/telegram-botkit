@@ -1,4 +1,4 @@
-﻿using Telegram.BotKit.Shared.Converters;
+using Telegram.BotKit.Shared.Converters;
 
 namespace Telegram.BotKit.Example.Converters;
 
