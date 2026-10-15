@@ -7,6 +7,14 @@ using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Hosting.Background;
 
+/// <summary>
+/// Background service that identifies the bot and receives updates with long polling.
+/// </summary>
+/// <param name="bot">The Telegram bot client.</param>
+/// <param name="botInfo">The identity holder filled in when the bot connects.</param>
+/// <param name="updateHandler">The application update handler that receives every update.</param>
+/// <param name="options">The bot options.</param>
+/// <param name="logger">The logger of the service.</param>
 internal sealed class PollingService(
     ITelegramBotClient bot,
     BotInfo botInfo,
@@ -14,6 +22,7 @@ internal sealed class PollingService(
     IOptions<TelegramBotOptions> options,
     ILogger<PollingService> logger) : BackgroundService
 {
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var botOptions = options.Value;
@@ -31,7 +40,7 @@ internal sealed class PollingService(
         // drop pre-existing webhook to unblock polling
         try
         {
-            await bot.DeleteWebhook(cancellationToken: stoppingToken);
+            await bot.DeleteWebhook(dropPendingUpdates: botOptions.DropPendingUpdates, cancellationToken: stoppingToken);
         }
         catch (Exception ex)
         {

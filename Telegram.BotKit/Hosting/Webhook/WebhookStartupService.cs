@@ -8,15 +8,29 @@ using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Hosting.Webhook;
 
+/// <summary>
+/// Hosted service that identifies the bot and registers the webhook with Telegram on start, and optionally removes it on stop.
+/// </summary>
+/// <param name="bot">The Telegram bot client.</param>
+/// <param name="botInfo">The identity holder filled in when the bot connects.</param>
+/// <param name="options">The bot options.</param>
+/// <param name="logger">The logger of the service.</param>
 internal sealed class WebhookStartupService(
     ITelegramBotClient bot,
     BotInfo botInfo,
     IOptions<TelegramBotOptions> options,
     ILogger<WebhookStartupService> logger) : IHostedService
 {
+    /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var botOptions = options.Value;
+
+        if (string.IsNullOrEmpty(botOptions.SecretToken))
+        {
+            logger.LogWarning(
+                "TelegramBot:SecretToken is not set. Anyone who knows the webhook URL can send forged updates to the bot.");
+        }
 
         try
         {
@@ -70,8 +84,14 @@ internal sealed class WebhookStartupService(
         }
     }
 
+    /// <inheritdoc />
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        if (!options.Value.DeleteWebhookOnShutdown)
+        {
+            return;
+        }
+
         logger.LogInformation("Removing Webhook...");
 
         // deletion failure on shutdown is not critical

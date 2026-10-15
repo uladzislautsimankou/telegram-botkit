@@ -10,7 +10,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
-using Telegram.Bot.Types;
 using Telegram.BotKit.Hosting.Background;
 using Telegram.BotKit.Hosting.Webhook;
 using Telegram.BotKit.Shared.Exceptions;
@@ -122,34 +121,15 @@ public sealed class BotBuilder
             routePath = webhookUri.AbsolutePath;
         }
 
-        app.MapPost(routePath, async (
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Telegram.BotKit.Webhook");
+
+        app.MapPost(routePath, (
             HttpContext context,
-            Update update,
             IUpdateHandler updateHandler,
             ITelegramBotClient botClient,
             CancellationToken cancellationToken) =>
-        {
-            if (!string.IsNullOrEmpty(options.SecretToken))
-            {
-                if (!context.Request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var tokenHeader)
-                    || !IsSecretTokenValid(tokenHeader.ToString(), options.SecretToken))
-                {
-                    return Results.Unauthorized();
-                }
-            }
-
-            await updateHandler.HandleUpdateAsync(botClient, update, cancellationToken);
-            return Results.Ok();
-        });
+            WebhookEndpoint.HandleAsync(context, options.SecretToken, updateHandler, botClient, logger, cancellationToken));
 
         return new BotApplication(app);
-    }
-
-    private static bool IsSecretTokenValid(string providedToken, string expectedToken)
-    {
-        var providedBytes = Encoding.UTF8.GetBytes(providedToken);
-        var expectedBytes = Encoding.UTF8.GetBytes(expectedToken);
-
-        return CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
     }
 }
