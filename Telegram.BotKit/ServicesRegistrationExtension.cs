@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.BotKit.Hosting;
 using Telegram.BotKit.Shared.Converters;
+using Telegram.BotKit.Shared.Startup;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -43,6 +44,9 @@ internal static class ServicesRegistrationExtension
 
                 return new TelegramBotClient(botOptions, httpClient);
             });
+
+        // checks that run when the application is built (see BotBuilder.Build)
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IStartupCheck, UpdateHandlerStartupCheck>());
 
         // register parameter binders and converters for model binding from incoming updates
         services.TryAddEnumerable(ServiceDescriptor.Transient<IValueConverter, DefaultValueConverter>());
