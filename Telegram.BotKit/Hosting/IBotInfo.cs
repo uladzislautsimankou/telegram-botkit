@@ -6,22 +6,22 @@ namespace Telegram.BotKit.Hosting;
 public interface IBotInfo
 {
     /// <summary>
-    /// Bot username without the leading symbol.
+    /// Gets the bot username without the leading '@'.
     /// </summary>
     string Username { get; }
 
     /// <summary>
-    /// Unique Telegram identifier.
+    /// Gets the unique Telegram identifier of the bot.
     /// </summary>
     long Id { get; }
 
     /// <summary>
-    /// First name registered in Telegram.
+    /// Gets the first name registered in Telegram.
     /// </summary>
     string FirstName { get; }
 
     /// <summary>
-    /// Last name registered in Telegram, or null if unset.
+    /// Gets the last name registered in Telegram, or null if unset.
     /// </summary>
     string? LastName { get; }
 }
