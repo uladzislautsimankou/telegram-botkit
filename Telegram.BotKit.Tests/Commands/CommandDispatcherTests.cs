@@ -4,7 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.BotKit.Commands;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.Commands;
 

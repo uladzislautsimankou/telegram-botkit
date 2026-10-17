@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.BotKit.InlineQueries.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.InlineQueries.Middlewares;
 

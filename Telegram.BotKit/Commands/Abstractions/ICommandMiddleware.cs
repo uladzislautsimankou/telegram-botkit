@@ -1,5 +1,5 @@
 using Telegram.BotKit.Commands.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Commands.Abstractions;
 

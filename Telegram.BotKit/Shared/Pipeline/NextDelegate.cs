@@ -1,4 +1,4 @@
-namespace Telegram.BotKit.Shared;
+namespace Telegram.BotKit.Shared.Pipeline;
 
 /// <summary>
 /// Represents a delegate that invokes the next component in the middleware pipeline.

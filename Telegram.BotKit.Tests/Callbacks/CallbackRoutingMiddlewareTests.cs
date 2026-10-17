@@ -4,7 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.BotKit.Callbacks.Invocation;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Callbacks.Routing;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Tests.Callbacks;

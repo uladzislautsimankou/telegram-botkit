@@ -1,10 +1,9 @@
 using FluentAssertions;
-using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
 using Telegram.BotKit.ChosenInlineResults.Routing;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.ChosenInlineResults;
 

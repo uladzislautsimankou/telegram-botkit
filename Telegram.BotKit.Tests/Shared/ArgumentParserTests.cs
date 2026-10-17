@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Telegram.BotKit.Helpers;
+using Telegram.BotKit.Shared.Parsing;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Tests.Shared;

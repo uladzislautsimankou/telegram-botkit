@@ -2,8 +2,11 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using Telegram.BotKit.Shared.Exceptions;
 
-namespace Telegram.BotKit.Helpers;
+namespace Telegram.BotKit.Shared.Parsing;
 
+/// <summary>
+/// Splits raw command arguments into tokens, honoring quotes and escapes.
+/// </summary>
 internal static class ArgumentParser
 {
     private const int StackallocTokenThreshold = 128;

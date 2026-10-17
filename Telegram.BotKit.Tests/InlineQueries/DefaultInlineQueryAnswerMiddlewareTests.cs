@@ -8,7 +8,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries.Middlewares;
 using Telegram.BotKit.InlineQueries.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.InlineQueries;
 

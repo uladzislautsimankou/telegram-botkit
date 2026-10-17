@@ -1,6 +1,6 @@
 using Telegram.BotKit.Callbacks.Abstractions;
 using Telegram.BotKit.Callbacks.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Callbacks.Routing;

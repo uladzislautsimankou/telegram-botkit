@@ -1,7 +1,15 @@
 namespace Telegram.BotKit.Commands.Parsing;
 
+/// <summary>
+/// Parses the text of a command message ("/command@botUsername arguments") into its parts.
+/// </summary>
 internal static class CommandParser
 {
+    /// <summary>
+    /// Splits a command message into the command name, the optional target bot username and the raw argument string.
+    /// </summary>
+    /// <param name="input">The message text; anything that does not start with "/" yields an empty command.</param>
+    /// <returns>The command name without the slash, the username of the bot the command is addressed to (null if none) and the unparsed arguments.</returns>
     // format examples:
     //   without parameters:                                    /command
     //   with parameters:                                       /command param1 paramN

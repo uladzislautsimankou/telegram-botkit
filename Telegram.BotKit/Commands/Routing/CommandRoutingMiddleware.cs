@@ -2,7 +2,7 @@ using Telegram.Bot.Types.Enums;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Hosting;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Commands.Routing;
 

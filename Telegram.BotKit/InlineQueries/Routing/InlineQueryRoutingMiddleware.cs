@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.InlineQueries.Routing;

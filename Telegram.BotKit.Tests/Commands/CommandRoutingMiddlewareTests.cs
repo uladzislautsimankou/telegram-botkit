@@ -7,7 +7,7 @@ using Telegram.BotKit.Commands.Invocation;
 using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Commands.Routing;
 using Telegram.BotKit.Hosting;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.Commands;
 

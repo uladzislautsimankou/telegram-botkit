@@ -1,7 +1,7 @@
 using Telegram.Bot.Types;
 using Telegram.BotKit.Commands.Invocation;
 using Telegram.BotKit.Commands.Parsing;
-using Telegram.BotKit.Helpers;
+using Telegram.BotKit.Shared.Parsing;
 
 namespace Telegram.BotKit.Commands.Models;
 

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Messages.Routing;
 
