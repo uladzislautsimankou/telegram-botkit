@@ -74,28 +74,6 @@ public sealed class DefaultInlineQueryAnswerMiddlewareTests
             Arg.Any<CancellationToken>());
     }
 
-    // verifies that unhandled query with empty results skips sending response
-    [Fact]
-    public async Task InvokeAsync_WhenNotHandledAndResultsEmpty_ShouldNotCallBotClient()
-    {
-        // arrange
-        var middleware = new DefaultInlineQueryAnswerMiddleware(_botClient, _logger);
-        var context = CreateContext("unknown");
-        context.IsHandled = false;
-
-        var nextCalled = false;
-        NextDelegate next = () => { nextCalled = true; return ValueTask.CompletedTask; };
-
-        // act
-        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
-
-        // assert
-        nextCalled.Should().BeTrue();
-        await _botClient.DidNotReceiveWithAnyArgs().SendRequest(
-            Arg.Any<IRequest<bool>>(),
-            Arg.Any<CancellationToken>());
-    }
-
     // verifies that client exception is logged and rethrown
     [Fact]
     public async Task InvokeAsync_WhenBotClientThrows_ShouldLogErrorAndRethrow()

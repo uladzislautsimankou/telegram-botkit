@@ -7,6 +7,9 @@ namespace Telegram.BotKit.InlineQueries.Models;
 /// </summary>
 public sealed record InlineQueryBatch
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InlineQueryBatch"/> class without results.
+    /// </summary>
     public InlineQueryBatch() { }
 
     /// <summary>
@@ -32,28 +35,28 @@ public sealed record InlineQueryBatch
     }
 
     /// <summary>
-    /// Gets the aggregated collection of inline results accumulated from all matched inline handlers.
+    /// Gets the inline results returned by the handler.
     /// </summary>
     public IReadOnlyList<InlineQueryResult> Results { get; init; } = [];
 
     /// <summary>
-    /// Gets or sets a value indicating whether the search results are personal and cached on the server side 
+    /// Gets a value indicating whether the search results are personal and cached on the server side
     /// exclusively for the user who sent the query. Default is false (cached globally).
     /// </summary>
     public bool IsPersonal { get; init; }
 
     /// <summary>
-    /// Gets or sets the maximum amount of time in seconds that the results of the inline query may be cached on Telegram servers.
+    /// Gets the maximum amount of time in seconds that the results of the inline query may be cached on Telegram servers.
     /// </summary>
     public int? CacheTime { get; init; }
 
     /// <summary>
-    /// Gets or sets the offset value used for paginated inline query results, identifying where the next page should begin.
+    /// Gets the offset value used for paginated inline query results, identifying where the next page should begin.
     /// </summary>
     public string? NextOffset { get; init; }
 
     /// <summary>
-    /// Gets or sets the button displayed above the inline query results.
+    /// Gets the button displayed above the inline query results.
     /// </summary>
     public InlineQueryResultsButton? Button { get; init; }
 }

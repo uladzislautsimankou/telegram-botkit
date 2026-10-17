@@ -36,6 +36,7 @@ public sealed class InlineQueryContext
     /// <summary>
     /// Gets or sets a value indicating whether the response should NOT be sent to Telegram.
     /// Middlewares can set this to true to suppress answering (e.g. rate-limit, auth failure).
+    /// Without it the default answer middleware answers every query, with an empty result list when nothing matched.
     /// </summary>
     public bool SkipAnswer { get; set; }
 
@@ -59,7 +60,7 @@ public sealed class InlineQueryContext
     }
 
     /// <summary>
-    /// Gets a view of exceptions captured from individual handlers that failed during parallel execution.
+    /// Gets a thread-safe snapshot of exceptions captured from individual handlers that failed during execution.
     /// </summary>
     public IReadOnlyList<Exception> Exceptions
     {
@@ -67,7 +68,7 @@ public sealed class InlineQueryContext
         {
             lock (_sync)
             {
-                return _exceptions;
+                return _exceptions.ToArray();
             }
         }
     }
@@ -77,7 +78,9 @@ public sealed class InlineQueryContext
     /// </summary>
     public bool IsPersonal
     {
-        get { lock (_sync)
+        get
+        {
+            lock (_sync)
             {
                 return _isPersonal;
             }
@@ -89,7 +92,9 @@ public sealed class InlineQueryContext
     /// </summary>
     public int? CacheTime
     {
-        get { lock (_sync)
+        get
+        {
+            lock (_sync)
             {
                 return _cacheTime;
             }
@@ -101,7 +106,9 @@ public sealed class InlineQueryContext
     /// </summary>
     public string? NextOffset
     {
-        get { lock (_sync)
+        get
+        {
+            lock (_sync)
             {
                 return _nextOffset;
             }
@@ -113,7 +120,9 @@ public sealed class InlineQueryContext
     /// </summary>
     public InlineQueryResultsButton? Button
     {
-        get { lock (_sync)
+        get
+        {
+            lock (_sync)
             {
                 return _button;
             }
@@ -186,3 +195,4 @@ public sealed class InlineQueryContext
         }
     }
 }
+
