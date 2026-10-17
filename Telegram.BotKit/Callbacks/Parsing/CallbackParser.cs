@@ -3,12 +3,18 @@ using System.Collections.Frozen;
 namespace Telegram.BotKit.Callbacks.Parsing;
 
 /// <summary>
-/// Utility parser for extracting keys and query parameters from raw callback query data with zero-allocation optimizations.
+/// Parses raw callback query data ("key?name=value&amp;name2=value2") into a route key and parameters.
+/// Works on spans, so only the resulting key, names and values are allocated.
 /// </summary>
 internal static class CallbackParser
 {
     private static readonly FrozenDictionary<string, string> EmptyParams = FrozenDictionary<string, string>.Empty;
 
+    /// <summary>
+    /// Parses callback query data into a route key and its parameters.
+    /// </summary>
+    /// <param name="data">The raw callback data; null or whitespace yields an empty key.</param>
+    /// <returns>The route key, trimmed, and the parameters by name (names are case-insensitive).</returns>
     public static (string Key, IReadOnlyDictionary<string, string> Parameters) Parse(string? data)
     {
         if (string.IsNullOrWhiteSpace(data))
@@ -19,7 +25,10 @@ internal static class CallbackParser
         var span = data.AsSpan();
         var queryIndex = span.IndexOf('?');
 
-        var key = queryIndex < 0 ? data : span[..queryIndex].ToString();
+        // the registry and the data builder trim keys, so data written by hand with stray whitespace around the key
+        // still matches; data without any whitespace to trim is not copied
+        var keySpan = (queryIndex < 0 ? span : span[..queryIndex]).Trim();
+        var key = keySpan.Length == data.Length ? data : keySpan.ToString();
 
         // return early with frozen singleton when no query parameters are present
         if (queryIndex < 0 || queryIndex == span.Length - 1)
