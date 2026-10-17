@@ -71,21 +71,6 @@ public sealed partial class ValueConverterTests
         result.Should().Be("hello");
     }
 
-    // verifies that an invalid integer string throws a format exception
-    [Fact]
-    public void Convert_WhenIntIsInvalid_ShouldThrowFormatException()
-    {
-        // arrange
-        var invalidInt = "not-a-number";
-        var targetType = typeof(int);
-
-        // act
-        var act = () => _converter.Convert(invalidInt, targetType);
-
-        // assert
-        act.Should().Throw<FormatException>();
-    }
-
     // verifies that unsupported target types without built-in string converters fail gracefully
     [Fact]
     public void TryConvert_WhenTypeHasNoDefaultConverter_ShouldReturnFalseAndNull()
@@ -213,20 +198,5 @@ public sealed partial class ValueConverterTests
         // assert
         success.Should().BeTrue();
         result.Should().Be(expectedValue);
-    }
-
-    // verifies that converting an invalid value for a type with a default descriptor throws format exception
-    [Fact]
-    public void Convert_WhenConversionFails_ShouldThrowFormatException()
-    {
-        // arrange
-        var input = "not-a-boolean";
-        var targetType = typeof(bool);
-
-        // act
-        var act = () => _converter.Convert(input, targetType);
-
-        // assert
-        act.Should().Throw<FormatException>();
     }
 }

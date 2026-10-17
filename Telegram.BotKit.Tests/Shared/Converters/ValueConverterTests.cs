@@ -25,6 +25,10 @@ public sealed partial class ValueConverterTests
     [InlineData(typeof(TimeOnly?))]
     [InlineData(typeof(TestEnum))]
     [InlineData(typeof(TestFlagsEnum))]
+    [InlineData(typeof(long))]
+    [InlineData(typeof(TimeSpan))]
+    [InlineData(typeof(Version))]
+    [InlineData(typeof(Uri))]
     public void CanConvert_WhenTypeIsSupported_ShouldReturnTrue(Type targetType)
     {
         // act

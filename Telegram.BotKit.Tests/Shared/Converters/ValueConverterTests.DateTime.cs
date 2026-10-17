@@ -29,21 +29,6 @@ public sealed partial class ValueConverterTests
         date.Day.Should().Be(day);
     }
 
-    // verifies that a format exception is thrown when the parsed datetime contains out-of-range values
-    [Fact]
-    public void Convert_WhenDateValueIsInvalid_ShouldThrowFormatException()
-    {
-        // arrange
-        var invalidDate = "2025-13-01";
-        var targetType = typeof(DateTime);
-
-        // act
-        var act = () => _converter.Convert(invalidDate, targetType);
-
-        // assert
-        act.Should().Throw<FormatException>();
-    }
-
     // verifies that dates with textual month representations are parsed correctly
     [Theory]
     [InlineData("2025.Jan.01", 2025, 1, 1)]
@@ -70,6 +55,7 @@ public sealed partial class ValueConverterTests
 
     // verifies that a format exception is thrown when the input is completely unparseable as a date
     [Theory]
+    [InlineData("2025-13-01")]
     [InlineData("not-a-date")]
     [InlineData("2025-99-99")]
     [InlineData("2025.13.45")]

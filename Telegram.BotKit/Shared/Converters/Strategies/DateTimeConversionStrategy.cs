@@ -2,37 +2,48 @@ using System.Globalization;
 
 namespace Telegram.BotKit.Shared.Converters.Strategies;
 
+/// <summary>
+/// Converts a date, a date with a time, or an ISO 8601 / textual date to <see cref="DateTime"/>.
+/// </summary>
 internal sealed class DateTimeConversionStrategy : IConversionStrategy
 {
+    /// <inheritdoc />
     public bool CanConvert(Type targetType) => targetType == typeof(DateTime);
 
-    public object Convert(string input, Type targetType)
+    /// <inheritdoc />
+    public bool TryConvert(string input, Type targetType, out object? result)
     {
+        result = null;
+
         var span = input.AsSpan().Trim();
         var separatorIndex = span.IndexOfAny('T', ' ');
 
         if (separatorIndex > 0)
         {
-            var dateSpan = span[..separatorIndex];
-            var timeSpan = span[(separatorIndex + 1)..];
-
-            if (DateOnlyConversionStrategy.TryParse(dateSpan, out var date) &&
-                TimeOnlyConversionStrategy.TryParse(timeSpan, out var time))
+            if (DateOnlyConversionStrategy.TryParse(span[..separatorIndex], out var date) &&
+                TimeOnlyConversionStrategy.TryParse(span[(separatorIndex + 1)..], out var time))
             {
-                return date.ToDateTime(time);
+                result = date.ToDateTime(time);
+                return true;
             }
         }
         else if (DateOnlyConversionStrategy.TryParse(span, out var dateOnly))
         {
-            return dateOnly.ToDateTime(TimeOnly.MinValue);
+            result = dateOnly.ToDateTime(TimeOnly.MinValue);
+            return true;
         }
 
         // fallback for standard iso-8601 strings and textual dates
         if (DateTime.TryParse(span, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTime))
         {
-            return dateTime;
+            result = dateTime;
+            return true;
         }
 
-        throw new FormatException($"String '{input}' was not recognized as a valid DateTime.");
+        return false;
     }
+
+    /// <inheritdoc />
+    public string DescribeFailure(string input, Type targetType) =>
+        $"String '{input}' was not recognized as a valid DateTime.";
 }

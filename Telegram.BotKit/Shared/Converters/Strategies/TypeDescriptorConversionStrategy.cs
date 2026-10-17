@@ -1,34 +1,46 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 
 namespace Telegram.BotKit.Shared.Converters.Strategies;
 
+/// <summary>
+/// Last-resort strategy for types that only expose a <see cref="TypeConverter"/> (e.g. <see cref="Uri"/>).
+/// </summary>
 internal sealed class TypeDescriptorConversionStrategy : IConversionStrategy
 {
-    public bool CanConvert(Type targetType)
-    {
-        var converter = TypeDescriptor.GetConverter(targetType);
-        return converter is not null && converter.CanConvertFrom(typeof(string));
-    }
+    private static readonly ConcurrentDictionary<Type, TypeConverter?> ConverterCache = new();
 
-    public object Convert(string input, Type targetType)
+    /// <inheritdoc />
+    public bool CanConvert(Type targetType) => GetConverter(targetType) is not null;
+
+    /// <inheritdoc />
+    public bool TryConvert(string input, Type targetType, out object? result)
     {
-        var converter = TypeDescriptor.GetConverter(targetType);
+        result = null;
+
+        var converter = GetConverter(targetType);
+        if (converter is null)
+        {
+            return false;
+        }
 
         try
         {
-            if (IsFloatingPoint(targetType))
-            {
-                input = input.Replace(',', '.');
-            }
-
-            return converter.ConvertFromInvariantString(input)!;
+            result = converter.ConvertFromInvariantString(input);
+            return result is not null;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            throw new FormatException($"Failed to convert value '{input}' to type '{targetType.Name}'.", ex);
+            // TypeConverter has no non-throwing API and wraps parse errors in arbitrary exception types
+            result = null;
+            return false;
         }
     }
 
-    private static bool IsFloatingPoint(Type type) =>
-        type == typeof(double) || type == typeof(float) || type == typeof(decimal);
+    private static TypeConverter? GetConverter(Type type) =>
+        ConverterCache.GetOrAdd(type, static t =>
+        {
+            var converter = TypeDescriptor.GetConverter(t);
+            return converter.CanConvertFrom(typeof(string)) ? converter : null;
+        });
 }

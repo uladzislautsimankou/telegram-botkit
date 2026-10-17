@@ -49,7 +49,7 @@ internal static class ServicesRegistrationExtension
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IStartupCheck, UpdateHandlerStartupCheck>());
 
         // register parameter binders and converters for model binding from incoming updates
-        services.TryAddEnumerable(ServiceDescriptor.Transient<IValueConverter, DefaultValueConverter>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValueConverter, DefaultValueConverter>());
 
         // register bot metadata and identification services
         services.AddSingleton<BotInfo>();
@@ -58,3 +58,4 @@ internal static class ServicesRegistrationExtension
         return services;
     }
 }
+
