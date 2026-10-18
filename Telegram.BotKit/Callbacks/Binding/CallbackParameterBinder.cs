@@ -1,98 +1,53 @@
-using System.Collections.Concurrent;
 using System.Reflection;
-using System.Text.Json.Serialization;
+using Telegram.BotKit.Callbacks.Attributes;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Shared.Binding;
 using Telegram.BotKit.Shared.Converters;
-using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Callbacks.Binding;
 
 /// <summary>
 /// Binds incoming callback parameters to strongly-typed models using compiled setters and value converters.
 /// </summary>
-internal sealed class CallbackParameterBinder(
-    IEnumerable<IValueConverter> converters) : ICallbackParameterBinder
+/// <param name="converters">The registered value converters; the one registered last has the highest priority.</param>
+internal sealed class CallbackParameterBinder(IEnumerable<IValueConverter> converters)
+    : ParameterBinderBase(converters), ICallbackParameterBinder
 {
-    private sealed record CallbackPropertyMetadata(
-        Type PropertyType,
-        IValueConverter Converter,
-        Action<object, object?> Setter
-    );
-
-    private readonly ConcurrentDictionary<Type, Dictionary<string, CallbackPropertyMetadata>> _cache = new();
-    private readonly IValueConverter[] _reversedConverters = converters.Reverse().ToArray();
-
+    /// <inheritdoc />
     public TParams Bind<TParams>(CallbackContext context) where TParams : class, new()
     {
-        var instance = new TParams();
+        var plan = GetPlan<TParams>();
 
-        if (context.RawParams.Count == 0)
-        {
-            return instance;
-        }
-
-        var propertyMap = _cache.GetOrAdd(typeof(TParams), BuildPropertyMap);
-
-        foreach (var (key, rawValue) in context.RawParams)
-        {
-            if (propertyMap.TryGetValue(key, out var propMeta))
-            {
-                var conversionCtx = new ValueConversionContext(rawValue, propMeta.PropertyType, instance);
-                if (!propMeta.Converter.TryConvert(conversionCtx, out var value))
-                {
-                    throw new InvalidParameterTypeException(
-                        parameterName: key,
-                        rawValue: rawValue,
-                        targetType: propMeta.PropertyType
-                    );
-                }
-
-                propMeta.Setter(instance, value);
-            }
-        }
-
-        return instance;
+        // models without parameters (e.g. EmptyCallbackParams) ignore the query string entirely;
+        // an empty query string is still checked against [CallbackParam(Required = true)]
+        return plan.Params.Length == 0
+            ? new TParams()
+            : BindCore<TParams>(plan, null, context.RawParams);
     }
 
-    private Dictionary<string, CallbackPropertyMetadata> BuildPropertyMap(Type type)
+    /// <inheritdoc />
+    // callback data is "key?name=value": every public property with a getter and a setter is a named parameter,
+    // [CallbackParam] only overrides its name and requiredness.
+    // Keep in sync with CallbackDataBuilder, which writes exactly these parameters: it has to read the value,
+    // so a property without a getter could be bound here but never produced there.
+    protected override ParamMetadata? MapProperty(PropertyInfo property, Func<Type, IValueConverter> resolveConverter)
     {
-        var map = new Dictionary<string, CallbackPropertyMetadata>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        if (!property.CanRead)
         {
-            if (!prop.CanWrite)
-            {
-                continue;
-            }
-
-            var attr = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
-            var key = attr?.Name ?? prop.Name;
-
-            if (!map.ContainsKey(key))
-            {
-                map[key] = new CallbackPropertyMetadata(
-                    PropertyType: prop.PropertyType,
-                    Converter: ResolveConverter(prop.PropertyType),
-                    Setter: PropertySetterCompiler.Compile(prop)
-                );
-            }
+            return null;
         }
 
-        return map;
-    }
+        var attribute = property.GetCustomAttribute<CallbackParamAttribute>();
 
-    private IValueConverter ResolveConverter(Type targetType)
-    {
-        for (var i = 0; i < _reversedConverters.Length; i++)
-        {
-            var converter = _reversedConverters[i];
-            if (converter.CanConvert(targetType))
-            {
-                return converter;
-            }
-        }
-
-        return _reversedConverters[0];
+        return new ParamMetadata(
+            PropertyInfo: property,
+            Name: attribute?.Name,
+            Position: -1,
+            Required: attribute?.Required ?? false,
+            PropertyType: property.PropertyType,
+            Converter: resolveConverter(property.PropertyType),
+            Setter: PropertySetterCompiler.Compile(property));
     }
 }
+
+

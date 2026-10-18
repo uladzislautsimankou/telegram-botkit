@@ -1,5 +1,5 @@
-using System.Text.Json.Serialization;
 using Telegram.Bot.Types;
+using Telegram.BotKit.Callbacks.Attributes;
 using Telegram.BotKit.Callbacks.Binding;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Shared.Converters;
@@ -12,12 +12,12 @@ public sealed partial class CallbackParameterBinderTests
     {
         public int Id { get; init; }
 
-        [JsonPropertyName("s")]
+        [CallbackParam(Name = "s")]
         public string? Status { get; init; }
 
         public TestEnum TestEnum { get; init; }
 
-        [JsonPropertyName("a")]
+        [CallbackParam(Name = "a")]
         public bool? IsActive { get; init; }
 
         public Guid? Uid { get; init; }

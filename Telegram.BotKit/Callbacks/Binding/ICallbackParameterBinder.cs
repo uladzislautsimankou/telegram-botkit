@@ -1,11 +1,12 @@
 using Telegram.BotKit.Callbacks.Models;
+using Telegram.BotKit.Shared.Binding;
 
 namespace Telegram.BotKit.Callbacks.Binding;
 
 /// <summary>
 /// Defines a binder responsible for mapping incoming callback query parameters to a strongly typed model.
 /// </summary>
-internal interface ICallbackParameterBinder
+internal interface ICallbackParameterBinder : IParameterModelValidator
 {
     /// <summary>
     /// Binds callback query parameters from the context to a new instance of <typeparamref name="TParams"/>.
@@ -15,3 +16,5 @@ internal interface ICallbackParameterBinder
     /// <returns>A populated instance of the parameter model.</returns>
     TParams Bind<TParams>(CallbackContext context) where TParams : class, new();
 }
+
+

@@ -1,11 +1,12 @@
 using Telegram.BotKit.Commands.Models;
+using Telegram.BotKit.Shared.Binding;
 
 namespace Telegram.BotKit.Commands.Binding;
 
 /// <summary>
 /// Defines a binder responsible for mapping incoming command arguments (e.g., positional or key=value arguments) to a strongly typed model.
 /// </summary>
-internal interface ICommandParameterBinder
+internal interface ICommandParameterBinder : IParameterModelValidator
 {
     /// <summary>
     /// Binds command arguments from the context to a new instance of <typeparamref name="TParams"/>.
@@ -15,4 +16,3 @@ internal interface ICommandParameterBinder
     /// <returns>A populated instance of the parameter model.</returns>
     TParams Bind<TParams>(CommandContext context) where TParams : class, new();
 }
-

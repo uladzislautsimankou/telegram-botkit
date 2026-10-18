@@ -106,7 +106,7 @@ public sealed partial class CallbackParameterBinderTests
 
         // assert
         act.Should().Throw<InvalidParameterTypeException>()
-            .Which.ParameterName.Should().Be("id");
+            .Which.ParameterName.Should().Be("Id");
     }
 
     // verifies that the thrown exception contains the raw alias parameter name when its type matching fails
