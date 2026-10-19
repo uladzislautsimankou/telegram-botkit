@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Callbacks.Abstractions;
 using Telegram.BotKit.Callbacks.Models;
@@ -9,18 +8,12 @@ namespace Telegram.BotKit.Callbacks;
 /// <summary>
 /// Dispatches callback queries by executing them through the compiled middleware pipeline.
 /// </summary>
-internal sealed class CallbackDispatcher(
-    IServiceProvider serviceProvider,
-    PipelineDelegate<CallbackContext> pipeline) : ICallbackDispatcher
+/// <param name="serviceProvider">The root service provider used to create a dependency scope for each callback query.</param>
+/// <param name="pipeline">The compiled callback middleware pipeline.</param>
+internal sealed class CallbackDispatcher(IServiceProvider serviceProvider, PipelineDelegate<CallbackContext> pipeline)
+    : DispatcherBase<CallbackContext>(serviceProvider, pipeline), ICallbackDispatcher
 {
-    public async Task DispatchAsync(CallbackQuery query, CancellationToken cancellationToken = default)
-    {
-        var context = new CallbackContext(query);
-
-        // create a dedicated async dependency scope for the incoming callback request
-        await using var scope = serviceProvider.CreateAsyncScope();
-
-        // execute the precompiled middleware delegate chain
-        await pipeline(context, scope.ServiceProvider, cancellationToken);
-    }
+    /// <inheritdoc />
+    public Task DispatchAsync(CallbackQuery query, CancellationToken cancellationToken = default) =>
+        RunAsync(new CallbackContext(query), cancellationToken);
 }

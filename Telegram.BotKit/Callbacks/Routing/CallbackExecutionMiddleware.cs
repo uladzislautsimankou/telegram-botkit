@@ -7,8 +7,10 @@ namespace Telegram.BotKit.Callbacks.Routing;
 /// <summary>
 /// Execution middleware responsible for running the matched callback handler.
 /// </summary>
+/// <param name="serviceProvider">The service provider used to resolve the parameter binder.</param>
 internal sealed class CallbackExecutionMiddleware(IServiceProvider serviceProvider) : ICallbackMiddleware
 {
+    /// <inheritdoc />
     public ValueTask InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         if (context is not { MatchedRegistration: not null, MatchedCallbackMetadata: not null })

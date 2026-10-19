@@ -18,12 +18,3 @@ public abstract class BotKitException : Exception
     protected BotKitException(string message, Exception? innerException) : base(message, innerException) { }
 }
 
-/// <summary>
-/// Thrown when a matching handler cannot be found for a specific route key.
-/// </summary>
-public sealed class RouteNotFoundException(string routeKey)
-    : BotKitException($"Handler not found for route: {routeKey}")
-{
-    public string RouteKey { get; } = routeKey;
-}
-

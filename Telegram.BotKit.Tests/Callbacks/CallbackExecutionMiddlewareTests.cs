@@ -35,12 +35,12 @@ public sealed class CallbackExecutionMiddlewareTests
             return Task.CompletedTask;
         };
 
-        var registration = new CallbackRegistration(typeof(DummyHandler), _ => handler, invoker);
+        var registration = new CallbackRegistration(typeof(DummyHandler), typeof(object), _ => handler, invoker);
         var query = new CallbackQuery { Id = "1", Data = "test" };
         var context = new CallbackContext(query)
         {
             MatchedRegistration = registration,
-            MatchedCallbackMetadata = new CallbackMetadata(typeof(DummyHandler), handler)
+            MatchedCallbackMetadata = new CallbackMetadata(typeof(DummyHandler), () => handler)
         };
 
         var nextCalled = false;
@@ -106,7 +106,7 @@ public sealed class CallbackExecutionMiddlewareTests
             return Task.CompletedTask;
         };
 
-        var registration = new CallbackRegistration(typeof(DummyHandler), _ => new DummyHandler(), invoker);
+        var registration = new CallbackRegistration(typeof(DummyHandler), typeof(object), _ => new DummyHandler(), invoker);
         var query = new CallbackQuery { Id = "1", Data = "test" };
         var context = new CallbackContext(query)
         {
@@ -129,5 +129,35 @@ public sealed class CallbackExecutionMiddlewareTests
         result.IsCompletedSuccessfully.Should().BeTrue();
         invokerCalled.Should().BeFalse();
         nextCalled.Should().BeFalse();
+    }
+
+    // verifies that the handler is created when execution runs, and exactly once
+    [Fact]
+    public async Task InvokeAsync_WhenExecuting_ShouldCreateHandlerExactlyOnce()
+    {
+        // arrange
+        var middleware = new CallbackExecutionMiddleware(Substitute.For<IServiceProvider>());
+        var handler = new DummyHandler();
+        var factoryCalls = 0;
+
+        var registration = new CallbackRegistration(
+            typeof(DummyHandler),
+            typeof(object),
+            _ => handler,
+            static (_, _, _, _) => Task.CompletedTask);
+
+        var context = new CallbackContext(new CallbackQuery { Id = "1", Data = "test" })
+        {
+            MatchedRegistration = registration,
+            MatchedCallbackMetadata = new CallbackMetadata(typeof(DummyHandler), () => { factoryCalls++; return handler; })
+        };
+
+        factoryCalls.Should().Be(0);
+
+        // act
+        await middleware.InvokeAsync(context, () => ValueTask.CompletedTask, TestContext.Current.CancellationToken);
+
+        // assert
+        factoryCalls.Should().Be(1);
     }
 }

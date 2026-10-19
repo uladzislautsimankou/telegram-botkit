@@ -1,8 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using NSubstitute;
 using Telegram.BotKit.Callbacks.Abstractions;
-using Telegram.BotKit.Callbacks.Binding;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Callbacks.Routing;
 using Telegram.BotKit.Shared.Pipeline;
@@ -27,22 +25,29 @@ public sealed class CallbackPipelineRegistrationTests
             Task.CompletedTask;
     }
 
+    private sealed class IdempotentCallbackHandler : ICallbackHandler<EmptyCallbackParams>
+    {
+        public static string Key => "idem";
+
+        public Task HandleAsync(EmptyCallbackParams parameters, CallbackContext context, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
     // verifies that callback handlers sharing identical parameter models register distinct registrations and factories without collisions
     [Fact]
     public async Task AddHandler_WhenMultipleHandlersShareSameParameters_ShouldRegisterDistinctRegistrations()
     {
         // arrange
         var services = new ServiceCollection();
-        services.AddSingleton(Substitute.For<ICallbackParameterBinder>());
 
-        var builder = new CallbackPipelineBuilder(services);
+        var registry = new CallbackHandlerRegistry();
+        var builder = new CallbackPipelineBuilder(services, registry);
 
         // act
         builder.AddHandler<CancelCallbackHandler>();
         builder.AddHandler<ConfirmCallbackHandler>();
 
         await using var provider = services.BuildServiceProvider();
-        var registry = provider.GetRequiredService<CallbackHandlerRegistry>();
         registry.Build();
 
         // assert
@@ -65,7 +70,7 @@ public sealed class CallbackPipelineRegistrationTests
     {
         // arrange
         var services = new ServiceCollection();
-        var builder = new CallbackPipelineBuilder(services);
+        var builder = new CallbackPipelineBuilder(services, new CallbackHandlerRegistry());
 
         // act
         builder.UseRouting();
@@ -73,5 +78,22 @@ public sealed class CallbackPipelineRegistrationTests
 
         // assert
         builder.Steps.Should().ContainSingle(step => step.Type == PipelineStepType.Routing);
+    }
+
+    // verifies that adding the same handler twice is harmless
+    [Fact]
+    public void AddHandler_WhenSameHandlerAddedTwice_ShouldNotThrowAndRegisterOnce()
+    {
+        var services = new ServiceCollection();
+        var builder = new CallbackPipelineBuilder(services, new CallbackHandlerRegistry());
+
+        var act = () =>
+        {
+            builder.AddHandler<IdempotentCallbackHandler>();
+            builder.AddHandler<IdempotentCallbackHandler>();
+        };
+
+        act.Should().NotThrow();
+        services.Count(d => d.ServiceType == typeof(IdempotentCallbackHandler)).Should().Be(1);
     }
 }

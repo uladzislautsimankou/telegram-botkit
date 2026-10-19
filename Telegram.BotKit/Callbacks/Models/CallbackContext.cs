@@ -7,11 +7,13 @@ namespace Telegram.BotKit.Callbacks.Models;
 /// <summary>
 /// Represents the execution context for an incoming callback query resulting from inline keyboard button interactions.
 /// </summary>
-public sealed record CallbackContext
+public sealed class CallbackContext
 {
     /// <summary>
-    /// Initializes a new instance of the callback context by parsing raw callback query data.
+    /// Initializes a new instance of the <see cref="CallbackContext"/> class by parsing the raw data of a callback query.
     /// </summary>
+    /// <param name="query">The callback query received from Telegram.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query"/> is null.</exception>
     public CallbackContext(CallbackQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -41,6 +43,9 @@ public sealed record CallbackContext
 
     /// <summary>
     /// Gets or sets the matched callback metadata containing details about the handler instance and its resolved type.
+    /// It is null when no handler is registered for <see cref="Key"/>, for example for a button of a message that was
+    /// sent before a deployment renamed or removed the handler. The pipeline then continues (a warning is logged),
+    /// so middleware placed after routing can react, e.g. answer the callback query with a notice.
     /// </summary>
     public CallbackMetadata? MatchedCallbackMetadata { get; set; }
 
@@ -49,3 +54,5 @@ public sealed record CallbackContext
     /// </summary>
     internal CallbackRegistration? MatchedRegistration { get; set; }
 }
+
+
