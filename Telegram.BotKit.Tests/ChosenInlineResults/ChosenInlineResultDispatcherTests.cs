@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.BotKit.ChosenInlineResults;
 using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
+using Telegram.BotKit.ChosenInlineResults.Routing;
 using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.ChosenInlineResults;
@@ -38,11 +39,10 @@ public sealed class ChosenInlineResultDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(dummyMiddleware);
 
-        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services);
+        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services, new ChosenInlineResultHandlerRegistry());
         pipelineBuilder.UseMiddleware<DummyChosenInlineResultMiddleware>();
 
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new ChosenInlineResultDispatcher(provider, compiledPipeline);
@@ -70,11 +70,10 @@ public sealed class ChosenInlineResultDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(faultyMiddleware);
 
-        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services);
+        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services, new ChosenInlineResultHandlerRegistry());
         pipelineBuilder.UseMiddleware<FaultyChosenInlineResultMiddleware>();
 
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new ChosenInlineResultDispatcher(provider, compiledPipeline);
@@ -99,9 +98,8 @@ public sealed class ChosenInlineResultDispatcherTests
     {
         // arrange
         var services = new ServiceCollection();
-        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services);
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services, new ChosenInlineResultHandlerRegistry());
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new ChosenInlineResultDispatcher(provider, compiledPipeline);
@@ -122,11 +120,10 @@ public sealed class ChosenInlineResultDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(dummyMiddleware);
 
-        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services);
+        var pipelineBuilder = new ChosenInlineResultPipelineBuilder(services, new ChosenInlineResultHandlerRegistry());
         pipelineBuilder.UseMiddleware<DummyChosenInlineResultMiddleware>();
 
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new ChosenInlineResultDispatcher(provider, compiledPipeline);

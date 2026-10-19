@@ -61,7 +61,6 @@ public sealed class ChosenInlineResultRoutingMiddlewareTests
 
         // assert
         called.Should().BeTrue();
-        context.MatchedHandler.Should().BeSameAs(handler);
         context.MatchedChosenInlineResultMetadata.Should().NotBeNull();
         context.MatchedChosenInlineResultMetadata!.HandlerType.Should().Be(typeof(MatchingChosenInlineResultHandler));
         context.MatchedChosenInlineResultMetadata.HandlerInstance.Should().BeSameAs(handler);
@@ -90,7 +89,36 @@ public sealed class ChosenInlineResultRoutingMiddlewareTests
 
         // assert
         called.Should().BeTrue();
-        context.MatchedHandler.Should().BeNull();
         context.MatchedChosenInlineResultMetadata.Should().BeNull();
+    }
+
+    // verifies that routing does not create the handler, and that the instance is created once when requested
+    [Fact]
+    public async Task InvokeAsync_WhenHandlerMatches_ShouldCreateItLazilyAndOnce()
+    {
+        // arrange
+        var factoryCalls = 0;
+        var registry = new ChosenInlineResultHandlerRegistry();
+        registry.Register(new ChosenInlineResultHandlerDescriptor(
+            typeof(MatchingChosenInlineResultHandler),
+            MatchingChosenInlineResultHandler.CanHandle,
+            _ => { factoryCalls++; return new MatchingChosenInlineResultHandler(); }));
+        registry.Build();
+
+        await using var provider = new ServiceCollection().BuildServiceProvider();
+        var middleware = new ChosenInlineResultRoutingMiddleware(registry, provider);
+        var context = new ChosenInlineResultContext(
+            new ChosenInlineResult { ResultId = "res_123", From = new User { Id = 1, FirstName = "Test" } });
+
+        // act
+        await middleware.InvokeAsync(context, () => ValueTask.CompletedTask, TestContext.Current.CancellationToken);
+        var callsAfterRouting = factoryCalls;
+        var first = context.MatchedChosenInlineResultMetadata!.HandlerInstance;
+        var second = context.MatchedChosenInlineResultMetadata.HandlerInstance;
+
+        // assert
+        callsAfterRouting.Should().Be(0);
+        factoryCalls.Should().Be(1);
+        second.Should().BeSameAs(first);
     }
 }

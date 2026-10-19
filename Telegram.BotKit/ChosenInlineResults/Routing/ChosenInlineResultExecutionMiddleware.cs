@@ -9,13 +9,15 @@ namespace Telegram.BotKit.ChosenInlineResults.Routing;
 /// </summary>
 internal sealed class ChosenInlineResultExecutionMiddleware : IChosenInlineResultMiddleware
 {
+    /// <inheritdoc />
     public ValueTask InvokeAsync(ChosenInlineResultContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
-        if (context.MatchedHandler is null)
+        if (context.MatchedChosenInlineResultMetadata is not { } metadata)
         {
             return ValueTask.CompletedTask;
         }
 
-        return new ValueTask(context.MatchedHandler.HandleAsync(context, cancellationToken));
+        var handler = (IChosenInlineResultHandler)metadata.HandlerInstance;
+        return new ValueTask(handler.HandleAsync(context, cancellationToken));
     }
 }

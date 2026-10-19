@@ -1,4 +1,5 @@
 using FluentAssertions;
+using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
@@ -33,7 +34,8 @@ public sealed class ChosenInlineResultExecutionMiddlewareTests
         var chosenResult = new ChosenInlineResult { ResultId = "res_123", From = new User { Id = 1, FirstName = "Test" } };
         var context = new ChosenInlineResultContext(chosenResult)
         {
-            MatchedHandler = handler
+            MatchedChosenInlineResultMetadata = new ChosenInlineResultMetadata(
+                typeof(StubChosenInlineResultHandler), () => handler)
         };
 
         var nextCalled = false;
@@ -49,7 +51,6 @@ public sealed class ChosenInlineResultExecutionMiddlewareTests
         // assert
         nextCalled.Should().BeFalse();
         handler.WasHandled.Should().BeTrue();
-        context.MatchedHandler.Should().BeSameAs(handler);
     }
 
     // verifies that execution middleware cleanly completes without calling next when matched handler is null
@@ -59,10 +60,7 @@ public sealed class ChosenInlineResultExecutionMiddlewareTests
         // arrange
         var middleware = new ChosenInlineResultExecutionMiddleware();
         var chosenResult = new ChosenInlineResult { ResultId = "res_123", From = new User { Id = 1, FirstName = "Test" } };
-        var context = new ChosenInlineResultContext(chosenResult)
-        {
-            MatchedHandler = null
-        };
+        var context = new ChosenInlineResultContext(chosenResult);
 
         var nextCalled = false;
         NextDelegate next = () =>

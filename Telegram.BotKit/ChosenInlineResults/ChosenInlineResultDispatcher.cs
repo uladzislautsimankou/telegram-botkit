@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
 using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.ChosenInlineResults.Models;
@@ -7,20 +6,14 @@ using Telegram.BotKit.Shared.Pipeline;
 namespace Telegram.BotKit.ChosenInlineResults;
 
 /// <summary>
-/// Dispatches incoming chosen inline result updates by executing them through the compiled pipeline.
+/// Dispatches incoming chosen inline result updates by executing them through the compiled middleware pipeline.
 /// </summary>
-internal sealed class ChosenInlineResultDispatcher(
-    IServiceProvider serviceProvider,
-    PipelineDelegate<ChosenInlineResultContext> pipeline) : IChosenInlineResultDispatcher
+/// <param name="serviceProvider">The root service provider used to create a dependency scope for each update.</param>
+/// <param name="pipeline">The compiled chosen inline result middleware pipeline.</param>
+internal sealed class ChosenInlineResultDispatcher(IServiceProvider serviceProvider, PipelineDelegate<ChosenInlineResultContext> pipeline)
+    : DispatcherBase<ChosenInlineResultContext>(serviceProvider, pipeline), IChosenInlineResultDispatcher
 {
-    public async Task DispatchAsync(ChosenInlineResult chosenResult, CancellationToken cancellationToken = default)
-    {
-        var context = new ChosenInlineResultContext(chosenResult);
-
-        // create a dedicated async dependency scope for the chosen inline result processing
-        await using var scope = serviceProvider.CreateAsyncScope();
-
-        // execute the precompiled middleware delegate chain
-        await pipeline(context, scope.ServiceProvider, cancellationToken);
-    }
+    /// <inheritdoc />
+    public Task DispatchAsync(ChosenInlineResult chosenResult, CancellationToken cancellationToken = default) =>
+        RunAsync(new ChosenInlineResultContext(chosenResult), cancellationToken);
 }

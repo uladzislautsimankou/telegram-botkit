@@ -9,6 +9,15 @@ namespace Telegram.BotKit.Tests.ChosenInlineResults;
 
 public sealed class ChosenInlineResultPipelineRegistrationTests
 {
+    private sealed class OrderedHandler : IChosenInlineResultHandler
+    {
+        public static int Order => 5;
+        public static bool CanHandle(ChosenInlineResult chosenResult) => true;
+
+        public Task HandleAsync(ChosenInlineResultContext context, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
     private sealed class DummyChosenInlineResultHandler : IChosenInlineResultHandler
     {
         public static bool CanHandle(ChosenInlineResult chosenResult) => true;
@@ -23,13 +32,13 @@ public sealed class ChosenInlineResultPipelineRegistrationTests
     {
         // arrange
         var services = new ServiceCollection();
-        var builder = new ChosenInlineResultPipelineBuilder(services);
+        var registry = new ChosenInlineResultHandlerRegistry();
+        var builder = new ChosenInlineResultPipelineBuilder(services, registry);
 
         // act
         builder.AddHandler<DummyChosenInlineResultHandler>();
 
         await using var provider = services.BuildServiceProvider();
-        var registry = provider.GetRequiredService<ChosenInlineResultHandlerRegistry>();
         registry.Build();
 
         // assert
@@ -45,14 +54,14 @@ public sealed class ChosenInlineResultPipelineRegistrationTests
     {
         // arrange
         var services = new ServiceCollection();
-        var builder = new ChosenInlineResultPipelineBuilder(services);
+        var registry = new ChosenInlineResultHandlerRegistry();
+        var builder = new ChosenInlineResultPipelineBuilder(services, registry);
 
         // act
         builder.AddHandler<DummyChosenInlineResultHandler>();
         builder.AddHandler<DummyChosenInlineResultHandler>();
 
         await using var provider = services.BuildServiceProvider();
-        var registry = provider.GetRequiredService<ChosenInlineResultHandlerRegistry>();
         registry.Build();
 
         // assert
@@ -60,5 +69,17 @@ public sealed class ChosenInlineResultPipelineRegistrationTests
             .Which.HandlerType.Should().Be(typeof(DummyChosenInlineResultHandler));
 
         provider.GetServices<DummyChosenInlineResultHandler>().Should().ContainSingle();
+    }
+
+    // verifies that Order declared by the handler is stored in its descriptor, also on the scanning path
+    [Fact]
+    public void RegisterHandlerByType_WhenHandlerDeclaresOrder_ShouldStoreItInDescriptor()
+    {
+        var registry = new ChosenInlineResultHandlerRegistry();
+
+        ChosenInlineResultRegistrationHelper.RegisterHandlerByType(new ServiceCollection(), registry, typeof(OrderedHandler));
+        registry.Build();
+
+        registry.GetHandlers().ToArray().Should().ContainSingle().Which.Order.Should().Be(5);
     }
 }
