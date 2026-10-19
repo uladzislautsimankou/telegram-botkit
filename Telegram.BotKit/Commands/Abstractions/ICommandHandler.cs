@@ -13,7 +13,7 @@ public interface ICommandHandler<TParams> where TParams : class, new()
     /// </summary>
     static abstract string Command { get; }
 
-    /// <summary> 
+    /// <summary>
     /// Gets a collection of alternative command names (aliases) that can be used
     /// to invoke the handler in addition to the primary <see cref="Command"/>.
     /// </summary>

@@ -34,16 +34,15 @@ public sealed class CommandPipelineRegistrationTests
     {
         // arrange
         var services = new ServiceCollection();
-        services.AddSingleton(Substitute.For<ICommandParameterBinder>());
 
-        var builder = new CommandPipelineBuilder(services);
+        var registry = new CommandHandlerRegistry();
+        var builder = new CommandPipelineBuilder(services, registry);
 
         // act
         builder.AddHandler<StartHandler>();
         builder.AddHandler<HelpHandler>();
 
         await using var provider = services.BuildServiceProvider();
-        var registry = provider.GetRequiredService<CommandHandlerRegistry>();
         registry.Build();
 
         // assert
@@ -66,15 +65,14 @@ public sealed class CommandPipelineRegistrationTests
     {
         // arrange
         var services = new ServiceCollection();
-        services.AddSingleton(Substitute.For<ICommandParameterBinder>());
 
-        var builder = new CommandPipelineBuilder(services);
+        var registry = new CommandHandlerRegistry();
+        var builder = new CommandPipelineBuilder(services, registry);
 
         // act
         builder.AddHandler<StartHandler>();
 
         await using var provider = services.BuildServiceProvider();
-        var registry = provider.GetRequiredService<CommandHandlerRegistry>();
         registry.Build();
 
         // assert
@@ -92,7 +90,7 @@ public sealed class CommandPipelineRegistrationTests
     {
         // arrange
         var services = new ServiceCollection();
-        var builder = new CommandPipelineBuilder(services);
+        var builder = new CommandPipelineBuilder(services, new CommandHandlerRegistry());
 
         // act
         builder.UseRouting();

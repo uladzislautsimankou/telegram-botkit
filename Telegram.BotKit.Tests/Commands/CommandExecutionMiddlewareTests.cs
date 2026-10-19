@@ -35,12 +35,12 @@ public sealed class CommandExecutionMiddlewareTests
             return Task.CompletedTask;
         };
 
-        var registration = new CommandRegistration(typeof(DummyHandler), _ => handler, invoker);
+        var registration = new CommandRegistration(typeof(DummyHandler), typeof(object), _ => handler, invoker);
         var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
         var context = new CommandContext(message)
         {
             MatchedRegistration = registration,
-            MatchedCommandMetadata = new CommandMetadata(typeof(DummyHandler), handler)
+            MatchedCommandMetadata = new CommandMetadata(typeof(DummyHandler), () => handler)
         };
 
         var nextCalled = false;
@@ -106,7 +106,7 @@ public sealed class CommandExecutionMiddlewareTests
             return Task.CompletedTask;
         };
 
-        var registration = new CommandRegistration(typeof(DummyHandler), _ => new DummyHandler(), invoker);
+        var registration = new CommandRegistration(typeof(DummyHandler), typeof(object), _ => new DummyHandler(), invoker);
         var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
         var context = new CommandContext(message)
         {
@@ -129,5 +129,35 @@ public sealed class CommandExecutionMiddlewareTests
         result.IsCompletedSuccessfully.Should().BeTrue();
         invokerCalled.Should().BeFalse();
         nextCalled.Should().BeFalse();
+    }
+
+    // verifies that the handler is created when execution runs, and exactly once
+    [Fact]
+    public async Task InvokeAsync_WhenExecuting_ShouldCreateHandlerExactlyOnce()
+    {
+        // arrange
+        var middleware = new CommandExecutionMiddleware(Substitute.For<IServiceProvider>());
+        var handler = new DummyHandler();
+        var factoryCalls = 0;
+
+        var registration = new CommandRegistration(
+            typeof(DummyHandler),
+            typeof(object),
+            _ => handler,
+            static (_, _, _, _) => Task.CompletedTask);
+
+        var context = new CommandContext(new Message { Text = "/test", Chat = new Chat { Id = 1 } })
+        {
+            MatchedRegistration = registration,
+            MatchedCommandMetadata = new CommandMetadata(typeof(DummyHandler), () => { factoryCalls++; return handler; })
+        };
+
+        factoryCalls.Should().Be(0);
+
+        // act
+        await middleware.InvokeAsync(context, () => ValueTask.CompletedTask, TestContext.Current.CancellationToken);
+
+        // assert
+        factoryCalls.Should().Be(1);
     }
 }

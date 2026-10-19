@@ -8,7 +8,7 @@ namespace Telegram.BotKit.Commands.Models;
 /// <summary>
 /// Represents the execution context for an incoming text command update.
 /// </summary>
-public sealed record CommandContext
+public sealed class CommandContext
 {
     private readonly string _rawArgs;
     private List<string>? _rawParams;
@@ -54,8 +54,11 @@ public sealed record CommandContext
     public CommandRouteResult RouteResult { get; set; }
 
     /// <summary>
-    /// Gets the list of raw string arguments parsed from the command string following the trigger.
-    /// Lazily parsed on first access to avoid string allocations for unmatched or ignored commands.
+    /// Gets the arguments following the command, split by whitespace. Double and typographic quotes («», “”, „“) group
+    /// words into one argument; a backslash escapes the next character everywhere (also outside quotes),
+    /// so write <c>\\</c> for a literal backslash. An unclosed quote throws
+    /// <see cref="Telegram.BotKit.Shared.Exceptions.InputParsingException"/> on first access.
+    /// Parsed lazily, only when a handler with bindable parameters needs the arguments.
     /// </summary>
     public List<string> RawParams => _rawParams ??= ArgumentParser.ParseArgs(_rawArgs);
 
