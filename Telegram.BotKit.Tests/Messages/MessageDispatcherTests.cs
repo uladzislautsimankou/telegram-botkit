@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.BotKit.Messages;
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
+using Telegram.BotKit.Messages.Routing;
 using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Tests.Messages;
@@ -38,11 +39,10 @@ public sealed class MessageDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(dummyMiddleware);
 
-        var pipelineBuilder = new MessagePipelineBuilder(services);
+        var pipelineBuilder = new MessagePipelineBuilder(services, new MessageHandlerRegistry());
         pipelineBuilder.UseMiddleware<DummyMessageMiddleware>();
 
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new MessageDispatcher(provider, compiledPipeline);
@@ -70,11 +70,10 @@ public sealed class MessageDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(faultyMiddleware);
 
-        var pipelineBuilder = new MessagePipelineBuilder(services);
+        var pipelineBuilder = new MessagePipelineBuilder(services, new MessageHandlerRegistry());
         pipelineBuilder.UseMiddleware<FaultyMessageMiddleware>();
 
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new MessageDispatcher(provider, compiledPipeline);
@@ -99,9 +98,8 @@ public sealed class MessageDispatcherTests
     {
         // arrange
         var services = new ServiceCollection();
-        var pipelineBuilder = new MessagePipelineBuilder(services);
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var pipelineBuilder = new MessagePipelineBuilder(services, new MessageHandlerRegistry());
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new MessageDispatcher(provider, compiledPipeline);
@@ -122,11 +120,10 @@ public sealed class MessageDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(dummyMiddleware);
 
-        var pipelineBuilder = new MessagePipelineBuilder(services);
+        var pipelineBuilder = new MessagePipelineBuilder(services, new MessageHandlerRegistry());
         pipelineBuilder.UseMiddleware<DummyMessageMiddleware>();
 
-        var compiledPipeline = pipelineBuilder.Build(static (middleware, context, next, ct) =>
-            middleware.InvokeAsync(context, next, ct));
+        var compiledPipeline = pipelineBuilder.Build();
 
         await using var provider = services.BuildServiceProvider();
         var dispatcher = new MessageDispatcher(provider, compiledPipeline);

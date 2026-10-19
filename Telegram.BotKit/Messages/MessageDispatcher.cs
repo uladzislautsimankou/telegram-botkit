@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
@@ -7,20 +6,14 @@ using Telegram.BotKit.Shared.Pipeline;
 namespace Telegram.BotKit.Messages;
 
 /// <summary>
-/// Dispatches incoming message updates by executing them through the compiled message middleware pipeline.
+/// Dispatches incoming message updates by executing them through the compiled middleware pipeline.
 /// </summary>
-internal sealed class MessageDispatcher(
-    IServiceProvider serviceProvider,
-    PipelineDelegate<MessageContext> pipeline) : IMessageDispatcher
+/// <param name="serviceProvider">The root service provider used to create a dependency scope for each update.</param>
+/// <param name="pipeline">The compiled message middleware pipeline.</param>
+internal sealed class MessageDispatcher(IServiceProvider serviceProvider, PipelineDelegate<MessageContext> pipeline)
+    : DispatcherBase<MessageContext>(serviceProvider, pipeline), IMessageDispatcher
 {
-    public async Task DispatchAsync(Message message, CancellationToken cancellationToken = default)
-    {
-        var context = new MessageContext(message);
-
-        // create a dedicated async dependency scope for the incoming message execution
-        await using var scope = serviceProvider.CreateAsyncScope();
-
-        // execute the precompiled middleware delegate chain
-        await pipeline(context, scope.ServiceProvider, cancellationToken);
-    }
+    /// <inheritdoc />
+    public Task DispatchAsync(Message message, CancellationToken cancellationToken = default) =>
+        RunAsync(new MessageContext(message), cancellationToken);
 }

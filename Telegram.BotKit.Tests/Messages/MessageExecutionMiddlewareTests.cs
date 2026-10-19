@@ -26,7 +26,7 @@ public sealed class MessageExecutionMiddlewareTests
 
     // verifies that execution middleware invokes the matched message handler and does not call next
     [Fact]
-    public async Task InvokeAsync_WhenMatchedHandlerIsNotNull_ShouldExecuteHandlerAndNotCallNext()
+    public async Task InvokeAsync_WhenHandlerWasMatched_ShouldExecuteHandlerAndNotCallNext()
     {
         // arrange
         var handler = new ExecutionSpyHandler();
@@ -35,7 +35,7 @@ public sealed class MessageExecutionMiddlewareTests
         var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
         var context = new MessageContext(message)
         {
-            MatchedHandler = handler
+            MatchedMessageMetadata = new MessageMetadata(typeof(ExecutionSpyHandler), () => handler)
         };
 
         var nextCalled = false;
@@ -54,17 +54,13 @@ public sealed class MessageExecutionMiddlewareTests
         nextCalled.Should().BeFalse();
     }
 
-    // verifies that execution middleware cleanly completes without calling next when matched handler is null
+    // verifies that execution middleware cleanly completes without calling next when no handler was matched
     [Fact]
-    public async Task InvokeAsync_WhenMatchedHandlerIsNull_ShouldCompleteWithoutCallingNext()
+    public async Task InvokeAsync_WhenNoHandlerWasMatched_ShouldCompleteWithoutCallingNext()
     {
         // arrange
         var middleware = new MessageExecutionMiddleware();
-        var message = new Message { Id = 123, Chat = new Chat { Id = 1 } };
-        var context = new MessageContext(message)
-        {
-            MatchedHandler = null
-        };
+        var context = new MessageContext(new Message { Id = 123, Chat = new Chat { Id = 1 } });
 
         var nextCalled = false;
         NextDelegate next = () =>
@@ -80,5 +76,27 @@ public sealed class MessageExecutionMiddlewareTests
         // assert
         result.IsCompletedSuccessfully.Should().BeTrue();
         nextCalled.Should().BeFalse();
+    }
+
+    // verifies that the handler is created only when execution runs, and exactly once
+    [Fact]
+    public async Task InvokeAsync_WhenExecuting_ShouldCreateHandlerExactlyOnce()
+    {
+        // arrange
+        var handler = new ExecutionSpyHandler();
+        var factoryCalls = 0;
+        var context = new MessageContext(new Message { Id = 123, Chat = new Chat { Id = 1 } })
+        {
+            MatchedMessageMetadata = new MessageMetadata(typeof(ExecutionSpyHandler), () => { factoryCalls++; return handler; })
+        };
+
+        factoryCalls.Should().Be(0);
+
+        // act
+        await new MessageExecutionMiddleware().InvokeAsync(context, () => ValueTask.CompletedTask, TestContext.Current.CancellationToken);
+
+        // assert
+        factoryCalls.Should().Be(1);
+        handler.InvocationCount.Should().Be(1);
     }
 }

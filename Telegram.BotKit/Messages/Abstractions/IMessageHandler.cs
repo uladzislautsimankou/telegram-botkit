@@ -22,10 +22,19 @@ public interface IMessageHandler
     /// <code>
     /// public static bool CanHandle(MessageContext context) =>
     ///     context.Message is { Chat.Type: ChatType.Private, Entities: { } entities }
-    ///     && entities.Any(e => e.Type == MessageEntityType.CustomEmoji);
+    ///     &amp;&amp; entities.Any(e => e.Type == MessageEntityType.CustomEmoji);
     /// </code>
     /// </example>
     static abstract bool CanHandle(MessageContext context);
+
+    /// <summary>
+    /// Gets the priority of this handler among the handlers evaluated for the same update: lower values go first, the default is 0.
+    /// Handlers with equal priority keep registration order: handlers found by assembly scanning are registered
+    /// ordered by full type name, handlers added with AddHandler follow in call order.
+    /// Message and chosen inline result updates are processed by the first handler whose CanHandle returns true;
+    /// for inline queries all matching handlers run and Order defines the order of their results.
+    /// </summary>
+    static virtual int Order => 0;
 
     /// <summary>
     /// Handles the message execution.

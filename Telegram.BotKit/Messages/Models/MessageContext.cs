@@ -1,12 +1,11 @@
 using Telegram.Bot.Types;
-using Telegram.BotKit.Messages.Abstractions;
 
 namespace Telegram.BotKit.Messages.Models;
 
 /// <summary>
 /// Represents the context of an incoming standard message update within the processing pipeline.
 /// </summary>
-public sealed record MessageContext
+public sealed class MessageContext
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="MessageContext"/> class.
@@ -35,9 +34,4 @@ public sealed record MessageContext
     /// Gets or sets the matched message metadata containing details about the handler instance and its resolved type.
     /// </summary>
     public MessageMetadata? MatchedMessageMetadata { get; set; }
-
-    /// <summary>
-    /// Gets or sets the matched message handler instance assigned during the routing phase to process this update.
-    /// </summary>
-    internal IMessageHandler? MatchedHandler { get; set; }
 }
