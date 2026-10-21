@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Telegram.BotKit.Callbacks;
 using Telegram.BotKit.Callbacks.Abstractions;
 using Telegram.BotKit.Callbacks.Binding;
+using Telegram.BotKit.Callbacks.Building;
 using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Callbacks.Routing;
 using Telegram.BotKit.Shared.Registration;
@@ -30,6 +31,7 @@ public static class CallbackServiceCollectionExtensions
     /// </para>
     /// <para>
     /// The parameter models of the handlers are validated when the application is built.
+    /// <see cref="ICallbackDataFactory"/> is registered for building callback data with custom value converters.
     /// </para>
     /// </remarks>
     /// <param name="services">The service collection to add components to.</param>
@@ -62,6 +64,7 @@ public static class CallbackServiceCollectionExtensions
         registry.Build();
         builder.RegisterPipeline<ICallbackDispatcher, CallbackDispatcher>();
         services.AddSingleton<ICallbackParameterBinder, CallbackParameterBinder>();
+        services.AddSingleton<ICallbackDataFactory, CallbackDataFactory>();
 
         // parameter models are checked when the application is built, not at the first callback that uses them
         services.AddSingleton<IStartupCheck>(new ParameterModelStartupCheck(
