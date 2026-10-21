@@ -3,12 +3,13 @@ using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
 
-namespace Telegram.BotKit.Example.Handlers.InlineQueries;
+namespace Telegram.BotKit.Example.Handlers.IInlineQueries;
 
 internal sealed class ArticleInlineQueryHandler : IInlineQueryHandler
 {
-    public bool CanHandle(InlineQuery query) =>
-        query.Query.Contains("art", StringComparison.OrdinalIgnoreCase);
+    public static bool CanHandle(InlineQuery query) =>
+        string.IsNullOrWhiteSpace(query.Query)
+        || query.Query.Contains("art", StringComparison.OrdinalIgnoreCase);
 
     public Task<InlineQueryBatch> HandleAsync(InlineQueryContext context, CancellationToken cancellationToken)
     {

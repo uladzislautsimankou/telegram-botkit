@@ -3,15 +3,16 @@ using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
 
-namespace Telegram.BotKit.Example.Handlers.InlineQueries;
+namespace Telegram.BotKit.Example.Handlers.IInlineQueries;
 
 /// <summary>
 /// Processes inline query keywords starting with "book" and supplies simulated search results.
 /// </summary>
 internal sealed class SearchInlineQueryHandler : IInlineQueryHandler
 {
-    public bool CanHandle(InlineQuery query) =>
-        query.Query.StartsWith("book", StringComparison.OrdinalIgnoreCase);
+    public static bool CanHandle(InlineQuery query) =>
+        string.IsNullOrWhiteSpace(query.Query)
+        || query.Query.StartsWith("book", StringComparison.OrdinalIgnoreCase);
 
     public Task<InlineQueryBatch> HandleAsync(InlineQueryContext context, CancellationToken cancellationToken)
     {

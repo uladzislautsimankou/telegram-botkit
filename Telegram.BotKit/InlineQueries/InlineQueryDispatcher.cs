@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
@@ -9,20 +8,15 @@ namespace Telegram.BotKit.InlineQueries;
 /// <summary>
 /// Dispatches incoming inline query updates by executing them through the compiled middleware pipeline.
 /// </summary>
-internal sealed class InlineQueryDispatcher(
-    IServiceProvider serviceProvider,
-    PipelineDelegate<InlineQueryContext> pipeline) : IInlineQueryDispatcher
+/// <param name="serviceProvider">The root service provider used to create a dependency scope for each update.</param>
+/// <param name="pipeline">The compiled inline query middleware pipeline.</param>
+internal sealed class InlineQueryDispatcher(IServiceProvider serviceProvider, PipelineDelegate<InlineQueryContext> pipeline)
+    : DispatcherBase<InlineQueryContext>(serviceProvider, pipeline), IInlineQueryDispatcher
 {
-    public async Task DispatchAsync(InlineQuery query, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public Task DispatchAsync(InlineQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-
-        var context = new InlineQueryContext(query);
-
-        // dedicated scope for the query lifecycle
-        await using var scope = serviceProvider.CreateAsyncScope();
-
-        // execute the precompiled middleware delegate chain
-        await pipeline(context, scope.ServiceProvider, cancellationToken);
+        return RunAsync(new InlineQueryContext(query), cancellationToken);
     }
 }

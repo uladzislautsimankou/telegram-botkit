@@ -4,6 +4,7 @@ namespace Telegram.BotKit.Commands;
 /// Provides fuzzy searching and spelling suggestions for bot commands using Damerau-Levenshtein distance.
 /// Searches input up to 64 characters with adaptive edit distance thresholds.
 /// </summary>
+/// <param name="commands">The registered command names to search among.</param>
 internal sealed class CommandSearcher(IEnumerable<string> commands)
 {
     private const int MaxCommandLength = 64;

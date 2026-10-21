@@ -6,14 +6,4 @@ namespace Telegram.BotKit.InlineQueries.Abstractions;
 /// <summary>
 /// Represents a middleware component that processes inline queries in the pipeline.
 /// </summary>
-public interface IInlineQueryMiddleware
-{
-    /// <summary>
-    /// Executes the middleware logic.
-    /// </summary>
-    /// <param name="context">The execution context associated with the current inline query.</param>
-    /// <param name="next">The delegate representing the next middleware in the pipeline.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the execution of the middleware.</returns>
-    ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default);
-}
+public interface IInlineQueryMiddleware : IPipelineMiddleware<InlineQueryContext>;

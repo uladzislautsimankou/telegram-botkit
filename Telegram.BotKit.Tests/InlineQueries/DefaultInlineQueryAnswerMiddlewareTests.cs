@@ -74,6 +74,31 @@ public sealed class DefaultInlineQueryAnswerMiddlewareTests
             Arg.Any<CancellationToken>());
     }
 
+    // verifies that a query no handler matched is still answered, with an empty result list
+    [Fact]
+    public async Task InvokeAsync_WhenNotHandledAndResultsEmpty_ShouldAnswerWithEmptyResults()
+    {
+        // arrange
+        var middleware = new DefaultInlineQueryAnswerMiddleware(_botClient, _logger);
+        var context = CreateContext("unknown");
+        context.IsHandled = false;
+
+        var nextCalled = false;
+        NextDelegate next = () => { nextCalled = true; return ValueTask.CompletedTask; };
+
+        // act
+        await middleware.InvokeAsync(context, next, TestContext.Current.CancellationToken);
+
+        // assert
+        nextCalled.Should().BeTrue();
+        await _botClient.Received(1).SendRequest(
+            Arg.Is<IRequest<bool>>(req =>
+                req is AnswerInlineQueryRequest
+                && ((AnswerInlineQueryRequest)req).InlineQueryId == "query_123"
+                && !((AnswerInlineQueryRequest)req).Results.Any()),
+            Arg.Any<CancellationToken>());
+    }
+
     // verifies that client exception is logged and rethrown
     [Fact]
     public async Task InvokeAsync_WhenBotClientThrows_ShouldLogErrorAndRethrow()
