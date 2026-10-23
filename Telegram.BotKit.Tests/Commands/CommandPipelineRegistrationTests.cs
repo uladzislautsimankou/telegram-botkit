@@ -1,8 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using NSubstitute;
 using Telegram.BotKit.Commands.Abstractions;
-using Telegram.BotKit.Commands.Binding;
 using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Commands.Routing;
 using Telegram.BotKit.Shared.Pipeline;
@@ -26,6 +24,45 @@ public sealed class CommandPipelineRegistrationTests
 
         public Task HandleAsync(EmptyCommandParams parameters, CommandContext context, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FirstMiddleware : ICommandMiddleware
+    {
+        public ValueTask InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default) => next();
+    }
+
+    private sealed class SecondMiddleware : ICommandMiddleware
+    {
+        public ValueTask InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default) => next();
+    }
+
+    private sealed class IdempotentCommandHandler : ICommandHandler<EmptyCommandParams>
+    {
+        public static string Command => "idem";
+
+        public Task HandleAsync(EmptyCommandParams parameters, CommandContext context, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    // verifies that UseMiddleware returns the concrete builder and keeps steps in call order relative to routing
+    [Fact]
+    public void UseMiddleware_WhenChainedWithRouting_ShouldReturnSameBuilderAndPreserveOrder()
+    {
+        // arrange
+        var builder = new CommandPipelineBuilder(new ServiceCollection(), new CommandHandlerRegistry());
+
+        // act
+        var chained = builder
+            .UseMiddleware<FirstMiddleware>()
+            .UseRouting()
+            .UseMiddleware<SecondMiddleware>();
+
+        // assert
+        chained.Should().BeSameAs(builder);
+        builder.Steps.Select(s => s.MiddlewareType).Should().Equal(
+            typeof(FirstMiddleware),
+            typeof(CommandRoutingMiddleware),
+            typeof(SecondMiddleware));
     }
 
     // verifies that handlers sharing identical parameter models register distinct registrations and factories without collisions
@@ -99,4 +136,22 @@ public sealed class CommandPipelineRegistrationTests
         // assert
         builder.Steps.Should().ContainSingle(step => step.Type == PipelineStepType.Routing);
     }
+
+    // verifies that adding the same handler twice is harmless
+    [Fact]
+    public void AddHandler_WhenSameHandlerAddedTwice_ShouldNotThrowAndRegisterOnce()
+    {
+        var services = new ServiceCollection();
+        var builder = new CommandPipelineBuilder(services, new CommandHandlerRegistry());
+
+        var act = () =>
+        {
+            builder.AddHandler<IdempotentCommandHandler>();
+            builder.AddHandler<IdempotentCommandHandler>();
+        };
+
+        act.Should().NotThrow();
+        services.Count(d => d.ServiceType == typeof(IdempotentCommandHandler)).Should().Be(1);
+    }
 }
+

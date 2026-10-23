@@ -51,4 +51,46 @@ public sealed partial class CommandParameterBinderTests
         };
         return new CommandContext(msg);
     }
+
+    private record SearchCommandParams
+    {
+        [CommandParam(Position = 0)]
+        public string Query { get; init; } = string.Empty;
+    }
+
+    private record GappedCommandParams
+    {
+        [CommandParam(Position = 0)]
+        public string First { get; init; } = string.Empty;
+
+        [CommandParam(Position = 5)]
+        public int Second { get; init; }
+    }
+
+    private record TwoStringsCommandParams
+    {
+        [CommandParam(Position = 0)]
+        public string Verb { get; init; } = string.Empty;
+
+        [CommandParam(Position = 1)]
+        public string Text { get; init; } = string.Empty;
+    }
+
+    private record DuplicatePositionParams
+    {
+        [CommandParam(Position = 0)]
+        public string A { get; init; } = string.Empty;
+
+        [CommandParam(Position = 0)]
+        public string B { get; init; } = string.Empty;
+    }
+
+    private record DuplicateNameParams
+    {
+        [CommandParam(Name = "item")]
+        public string A { get; init; } = string.Empty;
+
+        [CommandParam(Name = "ITEM")]
+        public string B { get; init; } = string.Empty;
+    }
 }

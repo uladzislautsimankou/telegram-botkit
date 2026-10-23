@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Tests.Callbacks.CallbackParameterBinderTests;
@@ -19,7 +20,7 @@ public sealed partial class CallbackParameterBinderTests
         result.Id.Should().Be(42);
     }
 
-    // verifies that parameters with custom json property names are mapped correctly using their aliases
+    // verifies that parameters with [CallbackParam] names are mapped correctly using their aliases
     [Fact]
     public void Bind_WhenAliasesAreProvided_ShouldMapToModel()
     {
@@ -136,5 +137,52 @@ public sealed partial class CallbackParameterBinderTests
 
         // assert
         result.Status.Should().Be(string.Empty);
+    }
+
+    // verifies that attribute names are matched case-insensitively
+    [Fact]
+    public void Bind_WhenAttributeNameDiffersInCase_ShouldMapToModel()
+    {
+        var result = _binder.Bind<TestCallbackParams>(CreateContext("test?S=ok"));
+
+        result.Status.Should().Be("ok");
+    }
+
+    // verifies that a required parameter missing from the callback data is reported
+    [Theory]
+    [InlineData("test")]
+    [InlineData("test?other=1")]
+    public void Bind_WhenRequiredParameterIsMissing_ShouldThrowMissingParameterException(string data)
+    {
+        var act = () => _binder.Bind<RequiredCallbackParams>(CreateContext(data));
+
+        act.Should().Throw<MissingParameterException>().Which.ParameterName.Should().Be("Id");
+    }
+
+    // verifies that a provided required parameter is bound
+    [Fact]
+    public void Bind_WhenRequiredParameterIsProvided_ShouldMapToModel()
+    {
+        var result = _binder.Bind<RequiredCallbackParams>(CreateContext("test?id=5"));
+
+        result.Id.Should().Be(5);
+    }
+
+    // verifies that models without parameters ignore any query string
+    [Fact]
+    public void Bind_WhenModelHasNoParameters_ShouldIgnoreQueryString()
+    {
+        var result = _binder.Bind<EmptyCallbackParams>(CreateContext("test?a=1&b=2"));
+
+        result.Should().NotBeNull();
+    }
+
+    // verifies that duplicate parameter names are rejected, names being case-insensitive
+    [Fact]
+    public void Bind_WhenModelDeclaresDuplicateNames_ShouldThrowInvalidOperationException()
+    {
+        var act = () => _binder.Bind<DuplicateNameCallbackParams>(CreateContext("test?x=1"));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*more than once*");
     }
 }

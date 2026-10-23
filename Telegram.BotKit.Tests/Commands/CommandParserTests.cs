@@ -134,4 +134,16 @@ public sealed class CommandParserTests
         result.BotUsername.Should().Be("AlertBot");
         result.RawArgs.TrimStart().Should().Be("urgent=true \"message with spaces\"");
     }
+
+    // verifies that leading whitespace disqualifies the text as a command and that an empty bot suffix yields an empty username
+    [Theory]
+    [InlineData(" /start", "", null)]
+    [InlineData("/cmd@", "cmd", "")]
+    public void ParseHeader_WhenHeaderIsMalformed_ShouldNotTreatItAsTargetedCommand(string input, string expectedCmd, string? expectedBot)
+    {
+        var result = CommandParser.ParseHeader(input);
+
+        result.Command.Should().Be(expectedCmd);
+        result.BotUsername.Should().Be(expectedBot);
+    }
 }

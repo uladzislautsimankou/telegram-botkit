@@ -108,4 +108,37 @@ public sealed class CallbackParserTests
         result.Key.Should().BeEmpty();
         result.Parameters.Should().BeEmpty();
     }
+
+    // verifies that whitespace around the key is ignored, as the registry and the data builder ignore it too
+    [Theory]
+    [InlineData(" menu", "menu")]
+    [InlineData("menu ", "menu")]
+    [InlineData("  menu  ", "menu")]
+    [InlineData(" game:start ?id=1", "game:start")]
+    [InlineData("\tgame:start\t?id=1", "game:start")]
+    public void Parse_WhenKeyHasSurroundingWhitespace_ShouldTrimKey(string input, string expectedKey)
+    {
+        var result = CallbackParser.Parse(input);
+
+        result.Key.Should().Be(expectedKey);
+    }
+
+    // verifies that trimming the key does not touch the parameters or whitespace inside the key
+    [Fact]
+    public void Parse_WhenKeyIsTrimmed_ShouldKeepParametersAndInnerWhitespace()
+    {
+        var result = CallbackParser.Parse(" a b ?name= value ");
+
+        result.Key.Should().Be("a b");
+        result.Parameters["name"].Should().Be(" value ");
+    }
+
+    // verifies that a key without whitespace is returned as is, without copying the string
+    [Fact]
+    public void Parse_WhenKeyNeedsNoTrimming_ShouldReturnSameStringInstance()
+    {
+        var input = new string("menu".ToCharArray());
+
+        CallbackParser.Parse(input).Key.Should().BeSameAs(input);
+    }
 }

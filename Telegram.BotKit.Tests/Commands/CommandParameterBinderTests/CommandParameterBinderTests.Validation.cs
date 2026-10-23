@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Tests.Commands.CommandParameterBinderTests;
@@ -48,5 +49,35 @@ public sealed partial class CommandParameterBinderTests
         // assert
         act.Should().Throw<InvalidParameterTypeException>()
             .Which.ParameterName.Should().Be("Age");
+    }
+
+    // verifies that models without bindable parameters ignore the arguments instead of failing on argument parsing
+    [Theory]
+    [InlineData("/start \"unclosed")]
+    [InlineData("/start a=b c")]
+    public void Bind_WhenModelHasNoBindableParameters_ShouldIgnoreArgumentsAndNotThrow(string text)
+    {
+        // arrange
+        var ctx = CreateContext(text);
+
+        // act
+        var act = () => _binder.Bind<EmptyCommandParams>(ctx);
+
+        // assert
+        act.Should().NotThrow();
+    }
+
+    // verifies that models with parameters still report malformed arguments
+    [Fact]
+    public void Bind_WhenModelHasParametersAndQuoteIsUnclosed_ShouldThrowInputParsingException()
+    {
+        // arrange
+        var ctx = CreateContext("/search \"unclosed");
+
+        // act
+        var act = () => _binder.Bind<SearchCommandParams>(ctx);
+
+        // assert
+        act.Should().Throw<InputParsingException>();
     }
 }

@@ -82,4 +82,45 @@ public sealed class CommandSearcherTests
         // assert
         result.Should().BeEmpty();
     }
+
+    // verifies that at most three suggestions are returned
+    [Fact]
+    public void FindSimilar_WhenMoreThanThreeCommandsMatch_ShouldReturnOnlyThree()
+    {
+        var searcher = new CommandSearcher(["/cmd1", "/cmd2", "/cmd3", "/cmd4", "/cmd5"]);
+
+        var result = searcher.FindSimilar("cmd");
+
+        result.Should().HaveCount(3);
+    }
+
+    // verifies that an exact match is ranked before near matches
+    [Fact]
+    public void FindSimilar_WhenExactMatchExists_ShouldReturnItFirst()
+    {
+        var searcher = new CommandSearcher(["/pins", "/pint", "/ping"]);
+
+        var result = searcher.FindSimilar("ping");
+
+        result[0].Should().Be("/ping");
+    }
+
+    // verifies that matching ignores letter case
+    [Fact]
+    public void FindSimilar_WhenInputHasDifferentCase_ShouldStillMatch() =>
+        _searcher.FindSimilar("PING").Should().Contain("/ping");
+
+    // verifies that inputs without any letters or digits and empty command sets never produce suggestions
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("/")]
+    [InlineData("___")]
+    public void FindSimilar_WhenInputHasNoSearchableCharacters_ShouldReturnEmpty(string input) =>
+        _searcher.FindSimilar(input).Should().BeEmpty();
+
+    // verifies that a searcher without commands does not fail
+    [Fact]
+    public void FindSimilar_WhenNoCommandsAreRegistered_ShouldReturnEmpty() =>
+        new CommandSearcher([]).FindSimilar("ping").Should().BeEmpty();
 }

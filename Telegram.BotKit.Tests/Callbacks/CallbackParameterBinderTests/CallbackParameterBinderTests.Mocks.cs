@@ -25,6 +25,21 @@ public sealed partial class CallbackParameterBinderTests
         public DateTime? Date { get; init; }
     }
 
+    private record RequiredCallbackParams
+    {
+        [CallbackParam(Required = true)]
+        public int Id { get; init; }
+    }
+
+    private record DuplicateNameCallbackParams
+    {
+        [CallbackParam(Name = "x")]
+        public int A { get; init; }
+
+        [CallbackParam(Name = "X")]
+        public int B { get; init; }
+    }
+
     private readonly CallbackParameterBinder _binder;
 
     public CallbackParameterBinderTests()

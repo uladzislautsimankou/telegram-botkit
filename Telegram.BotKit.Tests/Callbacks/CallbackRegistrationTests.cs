@@ -262,3 +262,4 @@ public sealed class CallbackRegistrationTests
         services.Count(d => d.ServiceType == typeof(TestCallbackHandler)).Should().Be(1);
     }
 }
+

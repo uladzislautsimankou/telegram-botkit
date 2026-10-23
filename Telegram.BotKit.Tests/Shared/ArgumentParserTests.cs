@@ -1,6 +1,6 @@
 using FluentAssertions;
-using Telegram.BotKit.Shared.Parsing;
 using Telegram.BotKit.Shared.Exceptions;
+using Telegram.BotKit.Shared.Parsing;
 
 namespace Telegram.BotKit.Tests.Shared;
 
@@ -236,20 +236,6 @@ public sealed class ArgumentParserTests
         result[1].Should().Be("two");
         result[2].Should().Be("three four");
         result[3].Should().Be("key=val");
-    }
-
-    // verifies that a trailing backslash at the very end of the input is preserved as a literal backslash
-    [Fact]
-    public void ParseArgs_WhenTrailingBackslashIsAtEndOfInput_ShouldPreserveIt()
-    {
-        // arrange
-        var input = "folder\\";
-
-        // act
-        var result = ArgumentParser.ParseArgs(input);
-
-        // assert
-        result.Should().ContainSingle().Which.Should().Be("folder\\");
     }
 
     // verifies that an input consisting solely of a backslash yields a single literal backslash

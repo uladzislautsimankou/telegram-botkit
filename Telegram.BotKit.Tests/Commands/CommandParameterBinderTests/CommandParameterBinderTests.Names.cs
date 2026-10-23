@@ -58,4 +58,38 @@ public sealed partial class CommandParameterBinderTests
         result.Status.Should().Be(TestEnum.Second);
         result.Date.Should().Be(new DateTime(2022, 02, 02));
     }
+
+    // verifies that a positional value containing '=' stays positional when the part before '=' is not a known parameter name
+    [Theory]
+    [InlineData("/search https://x.com/?id=5", "https://x.com/?id=5")]
+    [InlineData("/search a=b", "a=b")]
+    [InlineData("/search a=b c=d", "a=b c=d")]
+    [InlineData("/search =5", "=5")]
+    public void Bind_WhenPositionalValueContainsEqualsSign_ShouldKeepItAsPositional(string text, string expected)
+    {
+        // arrange
+        var ctx = CreateContext(text);
+
+        // act
+        var result = _binder.Bind<SearchCommandParams>(ctx);
+
+        // assert
+        result.Query.Should().Be(expected);
+    }
+
+    // verifies that named argument names are matched case-insensitively and do not consume positional slots
+    [Fact]
+    public void Bind_WhenNamedArgumentUsesDifferentCase_ShouldMapItAndKeepPositionalOrder()
+    {
+        // arrange
+        var ctx = CreateContext("/cmd NAME=Bob 1 First 2025-01-01 active=true");
+
+        // act
+        var result = _binder.Bind<ComplexCommandParams>(ctx);
+
+        // assert
+        result.Name.Should().Be("Bob");
+        result.Age.Should().Be(1);
+        result.Status.Should().Be(TestEnum.First);
+    }
 }
