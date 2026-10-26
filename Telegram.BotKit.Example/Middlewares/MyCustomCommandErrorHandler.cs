@@ -2,8 +2,8 @@ using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Models;
-using Telegram.BotKit.Shared.Pipeline;
 using Telegram.BotKit.Shared.Exceptions;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Example.Middlewares;
 

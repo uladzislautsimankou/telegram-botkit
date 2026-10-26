@@ -1,10 +1,12 @@
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using Telegram.BotKit.Callbacks.Building;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.Commands.Attributes;
 using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Example.Constants;
+using Telegram.BotKit.Example.Handlers.Callbacks;
 
 namespace Telegram.BotKit.Example.Handlers.Commands;
 
@@ -37,13 +39,14 @@ internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandl
             $"Count: {parameters.Count ?? 0}\n" +
             $"Date: {parameters.Date.ToShortDateString()}";
 
-        // prepare parameters for the callback button
-        // URL format: ping:click?m=...&c=...
-        var callbackData = $"{CallbackKeys.Example.Ping}?m={parameters.Message}&c={parameters.Count}";
-
         var keyboard = new InlineKeyboardMarkup(
-            InlineKeyboardButton.WithCallbackData("Test Callback", callbackData)
-        );
+        [
+            [
+                CallbackButton.Create<PingCallbackHandler, PingCallbackParams>(
+                    "Test Callback",
+                    new PingCallbackParams { Message = parameters.Message, Count = parameters.Count ?? 0 }),
+            ]
+        ]);
 
         await bot.SendMessage(
             chatId: context.Message.Chat.Id,

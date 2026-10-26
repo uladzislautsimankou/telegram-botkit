@@ -1,6 +1,8 @@
 using Telegram.Bot;
+using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
+using Telegram.BotKit.Shared.Exceptions;
 using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Example.Middlewares;
@@ -12,7 +14,7 @@ namespace Telegram.BotKit.Example.Middlewares;
 internal sealed class MyCustomInlineQueryErrorHandler(
     ITelegramBotClient bot,
     ILogger<MyCustomInlineQueryErrorHandler> logger
-) : IInlineQueryMiddleware
+    ) : IInlineQueryMiddleware
 {
     public async ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
