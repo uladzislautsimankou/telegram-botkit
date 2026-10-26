@@ -4,33 +4,36 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
 
+  <PropertyGroup>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <EnablePackageValidation>true</EnablePackageValidation>
+
     <Title>Telegram BotKit Framework</Title>
     <Description>Modern, structured .NET Framework for building Telegram Bots with Handler-based pipeline and smart parameter binding.</Description>
     <PackageId>Telegram.BotKit</PackageId>
-
     <Authors>Uladzislau Tsimankou</Authors>
 
     <RepositoryUrl>https://github.com/uladzislautsimankou/telegram-botkit</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/uladzislautsimankou/telegram-botkit</PackageProjectUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
     <PackageTags>telegram;bot;framework;mediator;handlers;middleware;</PackageTags>
-
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Types\**" />
-    <EmbeddedResource Remove="Types\**" />
-    <None Remove="Types\**" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
-    <None Include="..\LICENSE.txt" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
