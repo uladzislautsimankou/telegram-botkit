@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
@@ -43,8 +44,24 @@ public sealed class BotBuilderTests
             Task.CompletedTask;
     }
 
-    private static BotBuilder CreateBuilder(string mode) => BotApplication.CreateBuilder(
+    // stands in for a container other than the default one (Autofac, ...): the update handler is registered
+    // inside the container only, so it is never visible in builder.Services
+    private sealed class ReplacedContainerFactory : IServiceProviderFactory<IServiceCollection>
+    {
+        public IServiceCollection CreateBuilder(IServiceCollection services) => services;
+
+        public IServiceProvider CreateServiceProvider(IServiceCollection containerBuilder)
+        {
+            containerBuilder.AddSingleton(Substitute.For<IUpdateHandler>());
+            return containerBuilder.BuildServiceProvider();
+        }
+    }
+
+    // the environment is passed explicitly: the host validates the container on build in Development only,
+    // and the result of a test must not depend on the environment variables of the machine that runs it
+    private static BotBuilder CreateBuilder(string mode, string environment = "Production") => BotApplication.CreateBuilder(
     [
+        $"--environment={environment}",
         "--TelegramBot:Token=123456:ABC",
         $"--TelegramBot:Mode={mode}",
         "--TelegramBot:WebhookUrl=https://example.com/api/bot"
@@ -94,7 +111,7 @@ public sealed class BotBuilderTests
         act.Should().Throw<BotStartupException>().WithMessage("*Invalid TelegramBot:Mode*");
     }
 
-    // verifies that a missing update handler is reported by name instead of as an obscure container error
+    // verifies that a missing update handler is reported by name in both modes, not only where the host would notice it
     [Theory]
     [InlineData("Polling")]
     [InlineData("Webhook")]
@@ -106,21 +123,6 @@ public sealed class BotBuilderTests
 
         act.Should().Throw<BotStartupException>()
             .WithMessage("*No IUpdateHandler is registered*AddSingleton<IUpdateHandler, YourUpdateHandler>()*");
-    }
-
-    // verifies that the missing handler is reported even when the container validates itself on build (Development)
-    [Fact]
-    public void Build_WhenUpdateHandlerIsNotRegisteredInDevelopment_ShouldStillThrowBotStartupException()
-    {
-        var builder = BotApplication.CreateBuilder(
-        [
-            "--environment=Development",
-            "--TelegramBot:Token=123456:ABC"
-        ]);
-
-        var act = () => builder.Build();
-
-        act.Should().Throw<BotStartupException>().WithMessage("*No IUpdateHandler is registered*");
     }
 
     // verifies that a registered update handler lets the application be built
@@ -137,17 +139,52 @@ public sealed class BotBuilderTests
         app.Should().NotBeNull();
     }
 
-    // verifies that a handler whose dependencies cannot be resolved is reported once the container exists
+    // verifies that a handler registered only inside a replaced container is found: the checks use the built provider,
+    // not the service collection
     [Fact]
-    public void Build_WhenUpdateHandlerDependencyIsMissing_ShouldThrowBotStartupException()
+    public void Build_WhenUpdateHandlerExistsOnlyInReplacedContainer_ShouldReturnApplication()
     {
         var builder = CreateBuilder("Polling");
+        builder.HostBuilder!.ConfigureContainer(new ReplacedContainerFactory());
+
+        var app = builder.Build();
+
+        app.Should().NotBeNull();
+    }
+
+    // verifies that a handler whose dependencies cannot be resolved is reported in both modes once the container exists
+    [Theory]
+    [InlineData("Polling")]
+    [InlineData("Webhook")]
+    public void Build_WhenUpdateHandlerDependencyIsMissing_ShouldThrowBotStartupException(string mode)
+    {
+        var builder = CreateBuilder(mode);
         builder.Services.AddSingleton<IUpdateHandler, HandlerWithMissingDependency>();
 
         var act = () => builder.Build();
 
         act.Should().Throw<BotStartupException>()
             .WithMessage("*IUpdateHandler is registered, but it cannot be created*IMissingDependency*");
+    }
+
+    // verifies that invalid bot options fail Build() in both modes (webhook needs them to map the endpoint)
+    [Theory]
+    [InlineData("Polling")]
+    [InlineData("Webhook")]
+    public void Build_WhenOptionsAreInvalid_ShouldThrowOptionsValidationException(string mode)
+    {
+        var builder = BotApplication.CreateBuilder(
+        [
+            "--environment=Production",
+            "--TelegramBot:Token=",
+            $"--TelegramBot:Mode={mode}",
+            "--TelegramBot:WebhookUrl=https://example.com/api/bot"
+        ]);
+        builder.Services.AddSingleton(Substitute.For<IUpdateHandler>());
+
+        var act = () => builder.Build();
+
+        act.Should().Throw<OptionsValidationException>().WithMessage("*TelegramBot:Token*");
     }
 
     // verifies that an unusable parameter model fails the build and names the handler and the property
@@ -164,6 +201,19 @@ public sealed class BotBuilderTests
             .WithMessage("*Command handler 'BadModelHandler'*BadModelParams.Value*IValueConverter*");
     }
 
+    // verifies that the checks of the library still run when the host validates the container on build (Development)
+    [Fact]
+    public void Build_WhenCommandParameterModelIsInvalidInDevelopment_ShouldThrowBotStartupException()
+    {
+        var builder = CreateBuilder("Polling", environment: "Development");
+        builder.Services.AddSingleton(Substitute.For<IUpdateHandler>());
+        builder.Services.AddCommands(b => b.AddHandler<BadModelHandler>(), typeof(IUpdateHandler).Assembly);
+
+        var act = () => builder.Build();
+
+        act.Should().Throw<BotStartupException>().WithMessage("*Command handler 'BadModelHandler'*");
+    }
+
     // verifies that all setup problems are reported together, so they can be fixed in one go
     [Fact]
     public void Build_WhenSeveralProblemsExist_ShouldReportAllOfThem()
@@ -178,3 +228,4 @@ public sealed class BotBuilderTests
             .WithMessage("*2 problem(s)*cannot be created*IMissingDependency*Command handler 'BadModelHandler'*");
     }
 }
+

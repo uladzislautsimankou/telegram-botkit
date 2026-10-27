@@ -92,8 +92,6 @@ public sealed class BotBuilder
                 Args = args,
                 EnvironmentName = envName
             });
-
-            _webBuilder.Host.UseDefaultServiceProvider(options => options.ValidateOnBuild = false);
         }
         else
         {
@@ -102,19 +100,7 @@ public sealed class BotBuilder
                 Args = args,
                 EnvironmentName = envName
             });
-
-            // HostApplicationBuilder has no UseDefaultServiceProvider, so the default options of the host are repeated here
-            _hostBuilder.ConfigureContainer(new DefaultServiceProviderFactory(new ServiceProviderOptions
-            {
-                ValidateScopes = IsDevelopment(envName),
-                ValidateOnBuild = false
-            }));
         }
-
-        // Why validation on build is off: the Development environment turns it on by default, and then the container
-        // fails while it is being built, before the BotKit startup checks can run. Those checks need a built container
-        // and report every problem at once, with messages that name the handler. Build() runs the validation itself,
-        // right after them (see ValidateContainer).
 
         // options (validated on start) are registered before the hosted services, so invalid
         // configuration fails the host before the bot tries to connect to Telegram
@@ -128,26 +114,6 @@ public sealed class BotBuilder
         {
             Services.AddHostedService<PollingService>();
         }
-    }
-
-    private static bool IsDevelopment(string envName) =>
-        string.Equals(envName, Environments.Development, StringComparison.OrdinalIgnoreCase);
-
-    // Restores what the Development environment does by default and Build() switched off: checks that every registered
-    // service can be constructed. A second container is built from the same registrations only to be validated;
-    // validation does not create any service instances, so nothing the bot uses is created or disposed twice.
-    private void ValidateContainer()
-    {
-        if (!Environment.IsDevelopment())
-        {
-            return;
-        }
-
-        using var validated = Services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateScopes = true,
-            ValidateOnBuild = true
-        });
     }
 
     private static string ResolveEnvironmentName(string[] args)
@@ -186,31 +152,23 @@ public sealed class BotBuilder
     }
 
     /// <summary>
-    /// Builds the configured application instance and checks its setup: an <see cref="IUpdateHandler"/> is registered
-    /// and the parameter models of command and callback handlers are valid. All problems are logged and reported together.
+    /// Builds the configured application instance and checks the setup of the bot: an <see cref="IUpdateHandler"/> can be
+    /// created and the parameter models of command and callback handlers are valid. All problems are logged and reported
+    /// together. The checks only use the built service provider, so they work with any container and in both bot modes.
     /// </summary>
     /// <returns>The configured bot application.</returns>
     /// <exception cref="BotStartupException">Thrown when the setup is invalid; the message lists every problem.</exception>
     public BotApplication Build()
     {
-        // checked before the container is built: a missing handler is reported on its own, in one clear message
-        if (!UpdateHandlerStartupCheck.IsRegistered(Services))
-        {
-            StartupValidator.ThrowIfAny([UpdateHandlerStartupCheck.NotRegisteredMessage], loggerFactory: null);
-        }
-
         if (_mode is not BotMode.Webhook)
         {
             var host = _hostBuilder!.Build();
-            StartupValidator.Run(host.Services);
-            ValidateContainer();
+            RunStartupChecks(host.Services);
             return new BotApplication(host);
         }
 
         var app = _webBuilder!.Build();
-        StartupValidator.Run(app.Services);
-        ValidateContainer();
-        var options = app.Services.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
+        var options = RunStartupChecks(app.Services);
 
         var routePath = "/api/bot";
         if (Uri.TryCreate(options.WebhookUrl, UriKind.Absolute, out var webhookUri) && !string.IsNullOrWhiteSpace(webhookUri.AbsolutePath))
@@ -228,5 +186,13 @@ public sealed class BotBuilder
             WebhookEndpoint.HandleAsync(context, options.SecretToken, updateHandler, botClient, logger, cancellationToken));
 
         return new BotApplication(app);
+    }
+
+    // webhook mode needs the options to map its endpoint, so both modes read them here: invalid configuration
+    // fails Build() in either mode, not at host start in one of them
+    private static TelegramBotOptions RunStartupChecks(IServiceProvider services)
+    {
+        StartupValidator.Run(services);
+        return services.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
     }
 }

@@ -5,7 +5,9 @@ using Telegram.BotKit.Shared.Startup;
 namespace Telegram.BotKit.Hosting;
 
 /// <summary>
-/// Checks that the application registered an <see cref="IUpdateHandler"/>, which both polling and webhook mode require.
+/// Checks that the application registered an <see cref="IUpdateHandler"/> that can be created. Both polling and webhook
+/// mode require it, but only the polling service asks the container for it when the host starts; the webhook endpoint
+/// would fail with the first update, so the check makes both modes report the problem when the application is built.
 /// </summary>
 internal sealed class UpdateHandlerStartupCheck : IStartupCheck
 {
@@ -15,21 +17,7 @@ internal sealed class UpdateHandlerStartupCheck : IStartupCheck
         "IInlineQueryDispatcher, IChosenInlineResultDispatcher). " +
         "Register it before Build(): builder.Services.AddSingleton<IUpdateHandler, YourUpdateHandler>();";
 
-    /// <summary>
-    /// The problem description for a service collection without any <see cref="IUpdateHandler"/> registration.
-    /// </summary>
-    public const string NotRegisteredMessage = "No IUpdateHandler is registered. " + Explanation;
-
-    /// <summary>
-    /// Determines whether an <see cref="IUpdateHandler"/> is registered. Works on the service collection, so it can run
-    /// before the container is built: with validation on build (the Development environment) a missing handler would
-    /// otherwise surface as a DI error about the polling service, not as a message about the handler.
-    /// It does not tell whether the handler can be created; <see cref="Validate"/> checks that once the container exists.
-    /// </summary>
-    /// <param name="services">The service collection to inspect.</param>
-    /// <returns>True if an <see cref="IUpdateHandler"/> registration exists; otherwise, false.</returns>
-    public static bool IsRegistered(IServiceCollection services) =>
-        services.Any(d => d.ServiceType == typeof(IUpdateHandler));
+    private const string NotRegisteredMessage = "No IUpdateHandler is registered. " + Explanation;
 
     /// <inheritdoc />
     public IEnumerable<string> Validate(IServiceProvider services)
@@ -48,11 +36,10 @@ internal sealed class UpdateHandlerStartupCheck : IStartupCheck
 
             return [];
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            // the container reports which dependency is missing
+            // the container reports which dependency is missing (the exception type depends on the container)
             return [$"IUpdateHandler is registered, but it cannot be created: {ex.Message}"];
         }
     }
 }
-
