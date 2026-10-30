@@ -2,6 +2,7 @@ using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.BotKit.Callbacks.Abstractions;
+using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.Messages.Abstractions;
@@ -16,6 +17,7 @@ public class GlobalUpdateHandler(
     ICallbackDispatcher callbackDispatcher,
     IMessageDispatcher messageDispatcher,
     IInlineQueryDispatcher inlineQueryDispatcher,
+    IChosenInlineResultDispatcher chosenInlineResultDispatcher,
     ILogger<GlobalUpdateHandler> logger
     ) : IUpdateHandler
 {
@@ -45,6 +47,11 @@ public class GlobalUpdateHandler(
                 await inlineQueryDispatcher.DispatchAsync(inlineQuery, cancellationToken);
                 break;
 
+            // dispatch chosen inline results
+            case { ChosenInlineResult: { } chosenResult }:
+                await chosenInlineResultDispatcher.DispatchAsync(chosenResult, cancellationToken);
+                break;
+
             default:
                 break;
         }
@@ -56,3 +63,5 @@ public class GlobalUpdateHandler(
         return Task.CompletedTask;
     }
 }
+
+

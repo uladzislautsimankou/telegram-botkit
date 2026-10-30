@@ -1,18 +1,16 @@
-using Telegram.Bot;
-using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.InlineQueries.Models;
-using Telegram.BotKit.Shared.Exceptions;
 using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Example.Middlewares;
 
 /// <summary>
-/// Handles framework routing and execution errors for inline queries.
-/// Prevents logging unrecognized queries as critical errors and stops the Telegram loading spinner.
+/// Catches exceptions of the inline query pipeline (for example a failed answer to Telegram) and logs them,
+/// so they do not reach the update handler.
+/// A failing inline handler does not throw: its exception is logged by the framework and collected in
+/// <see cref="InlineQueryContext.Exceptions"/>, and a query that no handler matched is answered with an empty list.
 /// </summary>
 internal sealed class MyCustomInlineQueryErrorHandler(
-    ITelegramBotClient bot,
     ILogger<MyCustomInlineQueryErrorHandler> logger
     ) : IInlineQueryMiddleware
 {
@@ -22,19 +20,9 @@ internal sealed class MyCustomInlineQueryErrorHandler(
         {
             await next();
         }
-        //catch (RouteNotFoundException)
-        //{
-        //    // user typed an unmatched query or just opened the inline input.
-        //    // we answer with empty results to stop the perpetual loading spinner in Telegram.
-        //    await bot.AnswerInlineQuery(
-        //        inlineQueryId: context.Query.Id,
-        //        results: Array.Empty<InlineQueryResult>(),
-        //        cancellationToken: cancellationToken
-        //    );
-        //}
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "Critical error handling inline query");
+            logger.LogError(ex, "Critical error handling inline query {QueryId}", context.Query.Id);
         }
     }
 }

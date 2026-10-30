@@ -12,11 +12,18 @@ var builder = BotApplication.CreateBuilder(args);
 builder.Services.AddCommands(pipeline =>
 {
     pipeline.UseMiddleware<SimpleCommandLogMiddleware>();
-    pipeline.UseRouting();
+    // before routing: catches the errors of everything below
     pipeline.UseMiddleware<MyCustomCommandErrorHandler>();
+    pipeline.UseRouting();
+    // after routing: runs for unmatched commands too
+    pipeline.UseMiddleware<CommandRoutingResultMiddleware>();
 });
 
-builder.Services.AddCallbacks();
+builder.Services.AddCallbacks(pipeline =>
+{
+    pipeline.UseRouting();
+    pipeline.UseMiddleware<CallbackRoutingResultMiddleware>();
+});
 
 builder.Services.AddInlineQueries(pipeline =>
 {
@@ -24,6 +31,8 @@ builder.Services.AddInlineQueries(pipeline =>
     pipeline.UseRouting();
     pipeline.UseAnswer<LoggingInlineQueryAnswerMiddleware>();
 });
+
+builder.Services.AddChosenInlineResults();
 
 builder.Services.AddMessages(pipeline =>
 {
@@ -34,7 +43,7 @@ builder.Services.AddMessages(pipeline =>
 // register a custom converter (optional)
 builder.Services.AddTransient<IValueConverter, CustomDateConverter>();
 
-// override the main update handler (global logic)
+// register the update handler that passes updates to the dispatchers (required)
 builder.Services.AddSingleton<IUpdateHandler, GlobalUpdateHandler>();
 
 // build and run
