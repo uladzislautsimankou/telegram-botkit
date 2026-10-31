@@ -19,8 +19,19 @@ Usage examples and reference for routing, handlers, middleware pipelines, and co
 }
 ```
 
-> **ChosenInlineResult:** Telegram disables `chosen_inline_result` updates by default. Enable via [@BotFather](https://t.me/BotFather):
-> `/mybots` -> select bot -> **Bot Settings** -> **Inline Feedback** -> set to `100%`.
+| Option | Meaning |
+| --- | --- |
+| `Token` | The bot token from [@BotFather](https://t.me/BotFather). Required. |
+| `Mode` | `Polling` (default) or `Webhook`. |
+| `AllowedUpdates` | The update types to receive (`Message`, `CallbackQuery`, ...). Omitted keeps the previous settings, an empty array resets to the defaults. Misspelled names fail at startup. |
+| `WebhookUrl` | The public **HTTPS** address Telegram sends updates to; its path is the route of the endpoint. Webhook mode only. |
+| `SecretToken` | Sent in the `X-Telegram-Bot-Api-Secret-Token` header; requests without it are rejected. Strongly recommended for webhooks. |
+| `DropPendingUpdates` | Drops the updates that piled up while the bot was offline. |
+| `DeleteWebhookOnShutdown` | Removes the webhook when the application stops. Off by default, so a stopping instance does not delete the webhook of a new one. |
+| `MaxConnections`, `IpAddress`, `CertificatePath` | Webhook details: simultaneous connections (1-100), a fixed IP address for Telegram, a self-signed certificate. |
+| `BaseUrl` | The address of a private Bot API server. |
+
+The environment defaults to `Production` unless `DOTNET_ENVIRONMENT`, `ASPNETCORE_ENVIRONMENT` or `--environment` says otherwise. Keep the token out of the repository: use user secrets or the `TelegramBot__Token` environment variable.
 
 ---
 
@@ -36,11 +47,16 @@ var builder = BotApplication.CreateBuilder(args);
 
 builder.Services.AddCommands(pipeline =>
 {
-    pipeline.UseMiddleware<CommandLoggingMiddleware>();
+    pipeline.UseMiddleware<CommandErrorMiddleware>();          // before routing: catches the errors of everything below
     pipeline.UseRouting();
+    pipeline.UseMiddleware<CommandRoutingResultMiddleware>();  // after routing: runs for unmatched commands too
 });
 
-builder.Services.AddCallbacks();
+builder.Services.AddCallbacks(pipeline =>
+{
+    pipeline.UseRouting();
+    pipeline.UseMiddleware<CallbackRoutingResultMiddleware>();
+});
 
 builder.Services.AddInlineQueries(pipeline =>
 {
@@ -61,6 +77,21 @@ builder.Services.AddSingleton<IUpdateHandler, BotUpdateHandler>();
 var app = builder.Build();
 await app.RunAsync();
 ```
+
+Handlers are found automatically by scanning the calling assembly. To scan other assemblies pass them explicitly
+(the first parameter is the pipeline callback, so use a named argument), or add a single handler by hand:
+
+```csharp
+// scan another assembly
+builder.Services.AddCommands(assemblies: typeof(SharedCommands).Assembly);
+
+// ...or add a single handler by hand (use one AddCommands call, not both)
+builder.Services.AddCommands(pipeline => pipeline.AddHandler<PingCommandHandler>());
+```
+
+Call each `AddXxx()` once: scan several assemblies with a single call.
+
+`Build()` checks the setup before the bot starts: an `IUpdateHandler` that can be created and valid parameter models of commands and callbacks.
 
 ---
 
@@ -128,6 +159,115 @@ public sealed class BotUpdateHandler(
 
 ---
 
+## 🚇 Middleware: Errors and Routing Results
+
+The pipeline of every update kind is: middleware before `UseRouting()` → routing → middleware after `UseRouting()` → handler.
+
+* Middleware **before** `UseRouting()` wraps everything after it: the place for error handling and for anything routing depends on (e.g. `MessageContext.UserState`).
+* Middleware **after** `UseRouting()` runs also when **no handler matched**: it reads the routing result (`CommandContext.RouteResult`, `CallbackContext.MatchedCallbackMetadata`, `MessageContext.MatchedMessageMetadata`, ...). A middleware that does not call `next()` stops the pipeline.
+* The framework never replies on its own: unknown commands, binding errors and failed handlers are answered by your middleware, otherwise they only reach `IUpdateHandler.HandleErrorAsync`.
+
+### Command errors (before routing)
+
+```csharp
+public sealed class CommandErrorMiddleware(ITelegramBotClient bot, ILogger<CommandErrorMiddleware> logger) : ICommandMiddleware
+{
+    public async ValueTask InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await next();
+        }
+        catch (MissingParameterException ex)
+        {
+            await bot.SendMessage(context.Message.Chat.Id, $"Missing parameter: {ex.ParameterName}", cancellationToken: cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Command failed");
+            await bot.SendMessage(context.Message.Chat.Id, "Something went wrong.", cancellationToken: cancellationToken);
+        }
+    }
+}
+```
+
+`ParameterBindingException` (base of `MissingParameterException` and `InvalidParameterTypeException`) and `InputParsingException` (e.g. an unclosed quote) are the exceptions of bad user input.
+
+### Command routing result (after routing)
+
+```csharp
+public sealed class CommandRoutingResultMiddleware(ITelegramBotClient bot) : ICommandMiddleware
+{
+    public async ValueTask InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    {
+        var chatId = context.Message.Chat.Id;
+
+        switch (context.RouteResult.Status)
+        {
+            case CommandRouteStatus.Success:
+                await next();                                   // a handler is matched
+                break;
+
+            case CommandRouteStatus.Suggestions:                // a typo: similar commands are suggested
+                var list = string.Join(", ", context.RouteResult.Suggestions.Select(c => $"/{c}"));
+                await bot.SendMessage(chatId, $"Unknown command. Did you mean: {list}?", cancellationToken: cancellationToken);
+                break;
+
+            case CommandRouteStatus.NotFound:
+                await bot.SendMessage(chatId, "Unknown command.", cancellationToken: cancellationToken);
+                break;
+
+            // Ignored: addressed to another bot or not meant for us, VirtualRouteNotFound: log it
+        }
+    }
+}
+```
+
+To ignore a command completely, skip `next()` for it in a middleware placed before `UseRouting()`.
+
+### Callback routing result (after routing)
+
+```csharp
+public sealed class CallbackRoutingResultMiddleware(ITelegramBotClient bot) : ICallbackMiddleware
+{
+    public async ValueTask InvokeAsync(CallbackContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    {
+        if (context.MatchedCallbackMetadata is not null)
+        {
+            await next();                                       // a handler is matched
+            return;
+        }
+
+        // e.g. a button of a message sent before a deployment removed its handler:
+        // answer it, otherwise the button keeps showing the loading indicator
+        await bot.AnswerCallbackQuery(context.Query.Id, "This button is no longer active.", showAlert: true, cancellationToken: cancellationToken);
+    }
+}
+```
+
+### Inline query errors (before routing)
+
+A failing inline handler does not throw: its exception is logged and collected in `InlineQueryContext.Exceptions`, and a query that no handler matched is answered with an empty list. A middleware before `UseRouting()` only has to catch what is left, e.g. a failed answer:
+
+```csharp
+public sealed class InlineQueryErrorMiddleware(ILogger<InlineQueryErrorMiddleware> logger) : IInlineQueryMiddleware
+{
+    public async ValueTask InvokeAsync(InlineQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await next();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Inline query {QueryId} failed", context.Query.Id);
+        }
+    }
+}
+```
+
+---
+
 ## 💬 Commands (`ICommandHandler`)
 
 ### 1. Parameter Model
@@ -188,16 +328,17 @@ Maps query parameters from `callback_data` (e.g. `example:ping?m=test&c=1`).
 ### 1. Parameter Model
 
 ```csharp
-using System.Text.Json.Serialization;
+using Telegram.BotKit.Callbacks.Attributes;
 
 namespace MyBot.Models;
 
 public sealed record PingCallbackParams
 {
-    [JsonPropertyName("m")]
+    // short names save space: callback_data is limited to 64 bytes
+    [CallbackParam(Name = "m")]
     public string? Message { get; init; }
 
-    [JsonPropertyName("c")]
+    [CallbackParam(Name = "c")]
     public int? Count { get; init; }
 }
 ```
@@ -230,6 +371,18 @@ public sealed class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandl
 
 > For buttons without parameters use `ICallbackHandler<EmptyCallbackParams>`.
 
+### 3. Building the Button
+
+The callback data of a button is built from the same types, so the key and the parameter names cannot drift apart:
+
+```csharp
+using Telegram.BotKit.Callbacks.Building;
+
+var button = CallbackButton.Create<PingCallbackHandler, PingCallbackParams>(
+    "Ping",
+    new PingCallbackParams { Message = "hello", Count = 1 });
+```
+
 ---
 
 ## 🔍 Inline Queries (`IInlineQueryHandler`)
@@ -244,8 +397,11 @@ namespace MyBot.Handlers;
 
 public sealed class SearchInlineQueryHandler : IInlineQueryHandler
 {
-    public bool CanHandle(InlineQuery query) =>
+    public static bool CanHandle(InlineQuery query) =>
         query.Query.StartsWith("search", StringComparison.OrdinalIgnoreCase);
+
+    // optional: handlers with a lower order come first in the answer
+    public static int Order => 0;
 
     public Task<InlineQueryBatch> HandleAsync(InlineQueryContext context, CancellationToken cancellationToken)
     {
@@ -351,7 +507,7 @@ public interface IStateStorage
 ```csharp
 using Telegram.BotKit.Messages.Abstractions;
 using Telegram.BotKit.Messages.Models;
-using Telegram.BotKit.Shared;
+using Telegram.BotKit.Shared.Pipeline;
 using MyBot.Services;
 
 namespace MyBot.Middlewares;
@@ -470,3 +626,5 @@ public sealed class EchoStickerMessageHandler(ITelegramBotClient bot) : IMessage
     }
 }
 ```
+
+
