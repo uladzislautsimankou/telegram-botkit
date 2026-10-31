@@ -1,7 +1,7 @@
-﻿using Telegram.Bot;
+using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Extensions;
+using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.Messages.Models;
 
 namespace Telegram.BotKit.Example.Handlers.Messages;
 
@@ -12,7 +12,7 @@ internal sealed class SimpleTextHandler(ITelegramBotClient bot) : IMessageHandle
 {
     private const string Trigger = "repeat";
 
-    public bool CanHandle(MessageContext context) =>
+    public static bool CanHandle(MessageContext context) =>
         context.Message is { Chat.Type: ChatType.Private, Text: string text }
         && text.StartsWith(Trigger, StringComparison.OrdinalIgnoreCase);
 
@@ -24,12 +24,14 @@ internal sealed class SimpleTextHandler(ITelegramBotClient bot) : IMessageHandle
         var replyText = text[Trigger.Length..].Trim();
 
         if (string.IsNullOrWhiteSpace(replyText))
+        {
             replyText = "You didn't say anything";
+        }
 
-        await bot.ReplyMessage(
-            context: context,
+        await bot.SendMessage(
+            chatId: context.Message.Chat.Id,
             text: replyText,
-            cancellationToken: cancellationToken
-        );
+            replyParameters: context.Message.Id,
+            cancellationToken: cancellationToken);
     }
 }

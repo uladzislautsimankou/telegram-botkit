@@ -1,32 +1,35 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace Telegram.BotKit.Hosting;
 
 /// <summary>
-/// Represents the configured Telegram bot application.
-/// This class acts as a wrapper around the underlying .NET Host, managing the application's lifetime and execution.
+/// Configured Telegram bot application wrapper around the underlying .NET host.
 /// </summary>
 public sealed class BotApplication
 {
     private readonly IHost _host;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BotApplication"/> class.
+    /// </summary>
+    /// <param name="host">The built host that runs the bot.</param>
     internal BotApplication(IHost host) => _host = host;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="BotBuilder"/> class with pre-configured defaults.
+    /// Initializes a builder instance with default configurations.
     /// </summary>
-    /// <param name="args">The command-line arguments.</param>
-    /// <returns>A new <see cref="BotBuilder"/> instance.</returns>
-    public static BotBuilder CreateBuilder(string[] args) => new BotBuilder(args);
+    /// <param name="args">The command-line arguments (e.g. <c>--environment=Staging</c>, <c>--TelegramBot:Mode=Webhook</c>).</param>
+    /// <returns>A builder that configures the bot application.</returns>
+    public static BotBuilder CreateBuilder(string[] args) => new(args);
 
     /// <summary>
-    /// Runs the application and blocks the calling thread until the host is stopped.
+    /// Runs the application. The returned task completes when the host shuts down.
     /// </summary>
-    /// <returns>A task that represents the application's lifetime.</returns>
-    public async Task RunAsync() => await _host.RunAsync();
+    /// <param name="cancellationToken">A token that triggers the shutdown of the host.</param>
+    public Task RunAsync(CancellationToken cancellationToken = default) => _host.RunAsync(cancellationToken);
 
     /// <summary>
-    /// Gets the application's service provider, used to resolve dependencies.
+    /// Gets the application dependency injection container.
     /// </summary>
     public IServiceProvider Services => _host.Services;
 }

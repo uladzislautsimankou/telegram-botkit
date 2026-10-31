@@ -1,14 +1,20 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
-using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Configuration;
-using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.Shared.Exceptions;
 
 namespace Telegram.BotKit.Hosting.Background;
 
+/// <summary>
+/// Background service that identifies the bot and receives updates with long polling.
+/// </summary>
+/// <param name="bot">The Telegram bot client.</param>
+/// <param name="botInfo">The identity holder filled in when the bot connects.</param>
+/// <param name="updateHandler">The application update handler that receives every update.</param>
+/// <param name="options">The bot options.</param>
+/// <param name="logger">The logger of the service.</param>
 internal sealed class PollingService(
     ITelegramBotClient bot,
     BotInfo botInfo,
@@ -16,42 +22,35 @@ internal sealed class PollingService(
     IOptions<TelegramBotOptions> options,
     ILogger<PollingService> logger) : BackgroundService
 {
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var botOptions = options.Value;
+
         try
         {
-            var me = await bot.GetMe(cancellationToken: stoppingToken);
-
-            botInfo.SetState(me.Username, me.Id, me.FirstName, me.LastName);
-
-            logger.LogInformation("Bot started successfully: @{Username} (ID: {Id})", me.Username, me.Id);
+            await bot.InitializeIdentityAsync(botInfo, logger, stoppingToken);
         }
         catch (Exception ex)
         {
             logger.LogCritical(ex, "Failed to connect to Telegram API. Check your Token or Network connection.");
-
             throw new BotStartupException("Failed to initialize bot identity.", ex);
         }
 
-        // clear webhook just in case
+        // drop pre-existing webhook to unblock polling
         try
         {
-            await bot.DeleteWebhook(cancellationToken: stoppingToken);
+            await bot.DeleteWebhook(dropPendingUpdates: botOptions.DropPendingUpdates, cancellationToken: stoppingToken);
         }
         catch (Exception ex)
         {
-            // a failed webhook deletion is not always critical, but it is suspicious, so we log it as a warning
             logger.LogWarning("Could not delete webhook: {Message}", ex.Message);
         }
 
-        var allowedUpdates = options.Value.AllowedUpdates
-            .Select(x => Enum.Parse<UpdateType>(x, true))
-            .ToArray();
-
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = allowedUpdates,
-            DropPendingUpdates = false
+            AllowedUpdates = botOptions.ParsedAllowedUpdates,
+            DropPendingUpdates = botOptions.DropPendingUpdates
         };
 
         logger.LogInformation("Starting polling...");

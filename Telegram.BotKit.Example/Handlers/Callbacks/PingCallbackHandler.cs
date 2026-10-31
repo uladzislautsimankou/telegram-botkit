@@ -1,6 +1,7 @@
-﻿using System.Text.Json.Serialization;
 using Telegram.Bot;
-using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Callbacks.Abstractions;
+using Telegram.BotKit.Callbacks.Attributes;
+using Telegram.BotKit.Callbacks.Models;
 using Telegram.BotKit.Example.Constants;
 
 namespace Telegram.BotKit.Example.Handlers.Callbacks;
@@ -8,10 +9,10 @@ namespace Telegram.BotKit.Example.Handlers.Callbacks;
 internal record PingCallbackParams
 {
     // short alias "m" to save space in callback_data
-    [JsonPropertyName("m")]
+    [CallbackParam(Name = "m")]
     public string? Message { get; init; }
 
-    [JsonPropertyName("c")]
+    [CallbackParam(Name = "c")]
     public int? Count { get; init; }
 }
 
@@ -20,7 +21,7 @@ internal record PingCallbackParams
 /// </summary>
 internal sealed class PingCallbackHandler(ITelegramBotClient bot) : ICallbackHandler<PingCallbackParams>
 {
-    public string Key => CallbackKeys.Example.Ping;
+    public static string Key => CallbackKeys.Example.Ping;
 
     public async Task HandleAsync(PingCallbackParams parameters, CallbackContext context, CancellationToken cancellationToken = default)
     {

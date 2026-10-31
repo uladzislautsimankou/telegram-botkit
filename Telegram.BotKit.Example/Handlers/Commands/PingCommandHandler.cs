@@ -1,9 +1,12 @@
-﻿using Telegram.Bot;
+using Telegram.Bot;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Attributes;
+using Telegram.BotKit.Callbacks.Building;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Attributes;
+using Telegram.BotKit.Commands.Models;
 using Telegram.BotKit.Example.Constants;
-using Telegram.BotKit.Extensions;
+using Telegram.BotKit.Example.Handlers.Callbacks;
 
 namespace Telegram.BotKit.Example.Handlers.Commands;
 
@@ -26,7 +29,7 @@ internal record PingCommandParams
 /// </summary>
 internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandler<PingCommandParams>
 {
-    public string Command => CommandKeys.Example.Ping;
+    public static string Command => CommandKeys.Example.Ping;
 
     public async Task HandleAsync(PingCommandParams parameters, CommandContext context, CancellationToken cancellationToken = default)
     {
@@ -36,15 +39,21 @@ internal sealed class PingCommandHandler(ITelegramBotClient bot) : ICommandHandl
             $"Count: {parameters.Count ?? 0}\n" +
             $"Date: {parameters.Date.ToShortDateString()}";
 
-        // prepare parameters for the callback button
-        // URL format: ping:click?m=...&c=...
-        var callbackData = $"{CallbackKeys.Example.Ping}?m={parameters.Message}&c={parameters.Count}";
-
         var keyboard = new InlineKeyboardMarkup(
-            InlineKeyboardButton.WithCallbackData("Test Callback", callbackData)
-        );
+        [
+            [
+                CallbackButton.Create<PingCallbackHandler, PingCallbackParams>(
+                    "Test Callback",
+                    new PingCallbackParams { Message = parameters.Message, Count = parameters.Count ?? 0 }),
+            ]
+        ]);
 
-        // reply using the framework extension method
-        await bot.ReplyMessage(context, responseText, keyboard, cancellationToken: cancellationToken);
+        await bot.SendMessage(
+            chatId: context.Message.Chat.Id,
+            text: responseText,
+            replyParameters: context.Message.Id,
+            replyMarkup: keyboard,
+            parseMode: ParseMode.Html,
+            cancellationToken: cancellationToken);
     }
 }

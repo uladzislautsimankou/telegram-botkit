@@ -1,19 +1,22 @@
-﻿using Telegram.Bot;
+using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using Telegram.BotKit.Abstractions;
-using Telegram.BotKit.Exceptions;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.Commands.Models;
+using Telegram.BotKit.Shared.Exceptions;
+using Telegram.BotKit.Shared.Pipeline;
 
 namespace Telegram.BotKit.Example.Middlewares;
 
 /// <summary>
 /// Intercepts exceptions thrown during command execution to reply with styled diagnostic HTML.
+/// Registered before <c>UseRouting()</c>, so it wraps routing and execution.
 /// </summary>
 internal sealed class MyCustomCommandErrorHandler(
     ITelegramBotClient bot,
     ILogger<MyCustomCommandErrorHandler> logger
-    ) : ICommandErrorHandlerMiddleware
+    ) : ICommandMiddleware
 {
-    public async Task InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    public async ValueTask InvokeAsync(CommandContext context, NextDelegate next, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -27,21 +30,13 @@ internal sealed class MyCustomCommandErrorHandler(
                 parseMode: ParseMode.Html,
                 cancellationToken: cancellationToken);
         }
-        catch (CommandSuggestionsException ex)
-        {
-            logger.LogDebug("Unknown command with suggestions: /{Command}, suggestions: {Suggestions}",
-                ex.Command, string.Join(", ", ex.Suggestions));
-
-            var suggestions = string.Join(", ", ex.Suggestions.Select(c => $"<code>/{c}</code>"));
-            await bot.SendMessage(context.Message.Chat.Id,
-                $"🤷‍ Unknown command <code>/{ex.Command}</code>.\nDid you mean: {suggestions}?",
-                parseMode: ParseMode.Html,
-                cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Custom Error Handler caught an exception");
-            await bot.SendMessage(context.Message.Chat.Id, "Something went terribly wrong (Custom Handler).", cancellationToken: cancellationToken);
+            await bot.SendMessage(
+                context.Message.Chat.Id,
+                "Something went terribly wrong (Custom Handler).",
+                cancellationToken: cancellationToken);
         }
     }
 }

@@ -1,32 +1,50 @@
-using Telegram.BotKit.Abstractions;
+using Telegram.Bot.Polling;
 using Telegram.BotKit.Example.Converters;
 using Telegram.BotKit.Example.Middlewares;
 using Telegram.BotKit.Example.Services;
-using Telegram.BotKit.Extensions;
 using Telegram.BotKit.Hosting;
+using Telegram.BotKit.Shared.Converters;
+
 
 // create the builder (automatically loads configurations and selects the hosting mode)
 var builder = BotApplication.CreateBuilder(args);
 
-// register handlers from the current assembly
-var assembly = typeof(Program).Assembly;
-builder.Services.AddCommandHandlers(assembly);
-builder.Services.AddCallbackHandlers(assembly);
-builder.Services.AddMessageHandlers(assembly);
-builder.Services.AddInlineQueryHandlers(assembly);
+builder.Services.AddCommands(pipeline =>
+{
+    pipeline.UseMiddleware<SimpleCommandLogMiddleware>();
+    // before routing: catches the errors of everything below
+    pipeline.UseMiddleware<MyCustomCommandErrorHandler>();
+    pipeline.UseRouting();
+    // after routing: runs for unmatched commands too
+    pipeline.UseMiddleware<CommandRoutingResultMiddleware>();
+});
 
-// register custom middleware (optional)
-builder.Services.AddTransient<ICommandMiddleware, SimpleCommandLogMiddleware>();
+builder.Services.AddCallbacks(pipeline =>
+{
+    pipeline.UseRouting();
+    pipeline.UseMiddleware<CallbackRoutingResultMiddleware>();
+});
 
-// override default error handler (optional)
-builder.Services.AddTransient<ICommandErrorHandlerMiddleware, MyCustomCommandErrorHandler>();
-builder.Services.AddTransient<IInlineQueryErrorHandlerMiddleware, MyCustomInlineQueryErrorHandler>();
+builder.Services.AddInlineQueries(pipeline =>
+{
+    pipeline.UseMiddleware<MyCustomInlineQueryErrorHandler>();
+    pipeline.UseRouting();
+    pipeline.UseAnswer<LoggingInlineQueryAnswerMiddleware>();
+});
+
+builder.Services.AddChosenInlineResults();
+
+builder.Services.AddMessages(pipeline =>
+{
+    pipeline.UseMiddleware<UserStateMiddleware>();
+    pipeline.UseRouting();
+});
 
 // register a custom converter (optional)
 builder.Services.AddTransient<IValueConverter, CustomDateConverter>();
 
-// override the main update handler (global logic)
-builder.Services.ReplaceUpdateHandler<GlobalUpdateHandler>();
+// register the update handler that passes updates to the dispatchers (required)
+builder.Services.AddSingleton<IUpdateHandler, GlobalUpdateHandler>();
 
 // build and run
 var app = builder.Build();

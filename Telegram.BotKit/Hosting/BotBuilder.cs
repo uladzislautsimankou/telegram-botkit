@@ -1,115 +1,112 @@
-﻿using Microsoft.AspNetCore.Builder;
+using System.Reflection;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Telegram.BotKit.Configuration;
-using Telegram.BotKit.Extensions;
+using Microsoft.Extensions.Options;
+using Telegram.Bot;
+using Telegram.Bot.Polling;
 using Telegram.BotKit.Hosting.Background;
 using Telegram.BotKit.Hosting.Webhook;
+using Telegram.BotKit.Shared.Exceptions;
+using Telegram.BotKit.Shared.Startup;
 
 namespace Telegram.BotKit.Hosting;
 
 /// <summary>
-/// A builder for configuring the Telegram bot application, services, and middleware.
-/// Automatically handles the choice between Polling and Webhook modes based on configuration.
+/// Configures host services, pipelines, and runtime modes for the Telegram bot.
 /// </summary>
 public sealed class BotBuilder
 {
-    private readonly HostApplicationBuilder? _hostBuilder; // Used for Polling mode
-    private readonly WebApplicationBuilder? _webBuilder;   // Used for Webhook mode
+    // host instance for polling mode
+    private readonly HostApplicationBuilder? _hostBuilder;
+
+    // host instance for webhook mode
+    private readonly WebApplicationBuilder? _webBuilder;
 
     private readonly BotMode _mode;
 
     /// <summary>
-    /// Gets the service collection to register application services.
+    /// Gets the service collection of the underlying host builder.
     /// </summary>
-    public IServiceCollection Services => _hostBuilder?.Services ?? _webBuilder!.Services;
-
+    public IServiceCollection Services => _hostBuilder is not null ? _hostBuilder.Services : _webBuilder!.Services;
     /// <summary>
-    /// Gets the configuration manager for accessing application settings (appsettings.json, environment variables, etc.).
+    /// Gets the configuration manager of the underlying host builder.
     /// </summary>
-    public IConfigurationManager Configuration => _hostBuilder?.Configuration ?? _webBuilder!.Configuration;
-
+    public IConfigurationManager Configuration => _hostBuilder is not null ? _hostBuilder.Configuration : _webBuilder!.Configuration;
     /// <summary>
-    /// Gets information about the hosting environment (e.g., Development or Production).
+    /// Gets the hosting environment of the application.
     /// </summary>
-    public IHostEnvironment Environment => _hostBuilder?.Environment ?? _webBuilder!.Environment;
-
+    public IHostEnvironment Environment => _hostBuilder is not null ? _hostBuilder.Environment : _webBuilder!.Environment;
     /// <summary>
-    /// Gets the logging builder for configuring logging providers and filters.
+    /// Gets the logging builder used to configure the logging of the application.
     /// </summary>
-    public ILoggingBuilder Logging => _hostBuilder?.Logging ?? _webBuilder!.Logging;
-
+    public ILoggingBuilder Logging => _hostBuilder is not null ? _hostBuilder.Logging : _webBuilder!.Logging;
     /// <summary>
-    /// Gets the metrics builder for configuring OpenTelemetry and other metrics.
+    /// Gets the metrics builder used to configure the metrics of the application.
     /// </summary>
-    public IMetricsBuilder Metrics => _hostBuilder?.Metrics ?? _webBuilder!.Metrics;
-
+    public IMetricsBuilder Metrics => _hostBuilder is not null ? _hostBuilder.Metrics : _webBuilder!.Metrics;
     /// <summary>
-    /// Gets the underlying <see cref="HostApplicationBuilder"/> if running in Polling mode.
-    /// Returns null if running in Webhook mode.
+    /// Gets the generic host builder when the bot runs in polling mode; otherwise, null.
     /// </summary>
     public HostApplicationBuilder? HostBuilder => _hostBuilder;
-
     /// <summary>
-    /// Gets the underlying <see cref="WebApplicationBuilder"/> if running in Webhook mode.
-    /// Returns null if running in Polling mode.
-    /// Use this to configure Kestrel, CORS, or other web-specific settings.
+    /// Gets the web application builder when the bot runs in webhook mode; otherwise, null.
     /// </summary>
     public WebApplicationBuilder? WebApplicationBuilder => _webBuilder;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BotBuilder"/> class: reads the bot mode from the configuration,
+    /// creates the matching host builder and registers the framework services.
+    /// </summary>
+    /// <param name="args">The command-line arguments.</param>
+    /// <exception cref="BotStartupException">Thrown when <c>TelegramBot:Mode</c> is neither "Polling" nor "Webhook".</exception>
     internal BotBuilder(string[] args)
     {
-        // Determine the environment early to load the correct configuration file.
-        var envName =
-            System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
-            ?? System.Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
-            ?? Environments.Development;
+        var envName = ResolveEnvironmentName(args);
+        var preConfig = BuildPreConfiguration(args, envName);
 
-        // Build a temporary configuration to read the 'TelegramBot' settings before creating the actual host.
-        var preConfig = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddJsonFile($"appsettings.{envName}.json", optional: true, reloadOnChange: true)
-            .AddEnvironmentVariables()
-            .Build();
+        var rawMode = preConfig.GetSection(TelegramBotOptions.SectionName)["Mode"];
 
-        var botSettings = preConfig.GetSection("TelegramBot").Get<TelegramBotOptions>();
-
-        _mode = botSettings?.Mode ?? BotMode.Polling;
-
-        if (_mode == BotMode.Webhook)
+        if (!string.IsNullOrWhiteSpace(rawMode))
         {
-            // Initialize WebApplicationBuilder for Webhook mode (requires Kestrel and Controllers).
-            var webOptions = new WebApplicationOptions
+            if (!Enum.TryParse<BotMode>(rawMode, ignoreCase: true, out var parsedMode) || !Enum.IsDefined(parsedMode))
             {
-                Args = args,
-                EnvironmentName = envName
-            };
+                throw new BotStartupException($"Invalid TelegramBot:Mode '{rawMode}'. Expected 'Polling' or 'Webhook'.");
+            }
 
-            _webBuilder = WebApplication.CreateBuilder(webOptions);
-
-            _webBuilder.Services.AddControllers();
+            _mode = parsedMode;
         }
         else
         {
-            // Initialize HostApplicationBuilder for Polling mode (lightweight, no web server).
-            var hostOptions = new HostApplicationBuilderSettings
+            _mode = BotMode.Polling;
+        }
+
+        if (_mode is BotMode.Webhook)
+        {
+            _webBuilder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
                 Args = args,
                 EnvironmentName = envName
-            };
-
-            _hostBuilder = Host.CreateApplicationBuilder(hostOptions);
+            });
+        }
+        else
+        {
+            _hostBuilder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+            {
+                Args = args,
+                EnvironmentName = envName
+            });
         }
 
-        // Register the core framework services.
+        // options (validated on start) are registered before the hosted services, so invalid
+        // configuration fails the host before the bot tries to connect to Telegram
         Services.AddTelegramBotFramework(Configuration);
 
-        // Register the appropriate startup service based on the selected mode.
-        if (_mode == BotMode.Webhook)
+        if (_mode is BotMode.Webhook)
         {
             Services.AddHostedService<WebhookStartupService>();
         }
@@ -119,28 +116,83 @@ public sealed class BotBuilder
         }
     }
 
+    private static string ResolveEnvironmentName(string[] args)
+    {
+        // same sources as the default hosts: DOTNET_/ASPNETCORE_ variables and --environment
+        var hostConfig = new ConfigurationBuilder()
+            .AddEnvironmentVariables("DOTNET_")
+            .AddEnvironmentVariables("ASPNETCORE_")
+            .AddCommandLine(args)
+            .Build();
+
+        var name = hostConfig[HostDefaults.EnvironmentKey];
+
+        // absence of an explicit environment means Production, as in the generic host
+        return string.IsNullOrWhiteSpace(name) ? Environments.Production : name;
+    }
+
+    private static IConfigurationRoot BuildPreConfiguration(string[] args, string envName)
+    {
+        // mirrors the default host configuration sources: same order, same content root
+        var builder = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+            .AddJsonFile($"appsettings.{envName}.json", optional: true, reloadOnChange: false);
+
+        if (string.Equals(envName, Environments.Development, StringComparison.OrdinalIgnoreCase)
+            && Assembly.GetEntryAssembly() is { } entryAssembly)
+        {
+            builder.AddUserSecrets(entryAssembly, optional: true);
+        }
+
+        return builder
+            .AddEnvironmentVariables()
+            .AddCommandLine(args)
+            .Build();
+    }
+
     /// <summary>
-    /// Builds the <see cref="BotApplication"/>.
+    /// Builds the configured application instance and checks the setup of the bot: an <see cref="IUpdateHandler"/> can be
+    /// created and the parameter models of command and callback handlers are valid. All problems are logged and reported
+    /// together. The checks only use the built service provider, so they work with any container and in both bot modes.
     /// </summary>
-    /// <returns>A configured instance of <see cref="BotApplication"/>.</returns>
+    /// <returns>The configured bot application.</returns>
+    /// <exception cref="BotStartupException">Thrown when the setup is invalid; the message lists every problem.</exception>
     public BotApplication Build()
     {
-        IHost host;
-
-        if (_mode == BotMode.Webhook)
+        if (_mode is not BotMode.Webhook)
         {
-            var app = _webBuilder!.Build();
-
-            // Map controllers to handle incoming Telegram updates via HTTP POST.
-            app.MapControllers();
-
-            host = app;
-        }
-        else
-        {
-            host = _hostBuilder!.Build();
+            var host = _hostBuilder!.Build();
+            RunStartupChecks(host.Services);
+            return new BotApplication(host);
         }
 
-        return new BotApplication(host);
+        var app = _webBuilder!.Build();
+        var options = RunStartupChecks(app.Services);
+
+        var routePath = "/api/bot";
+        if (Uri.TryCreate(options.WebhookUrl, UriKind.Absolute, out var webhookUri) && !string.IsNullOrWhiteSpace(webhookUri.AbsolutePath))
+        {
+            routePath = webhookUri.AbsolutePath;
+        }
+
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Telegram.BotKit.Webhook");
+
+        app.MapPost(routePath, (
+            HttpContext context,
+            IUpdateHandler updateHandler,
+            ITelegramBotClient botClient,
+            CancellationToken cancellationToken) =>
+            WebhookEndpoint.HandleAsync(context, options.SecretToken, updateHandler, botClient, logger, cancellationToken));
+
+        return new BotApplication(app);
+    }
+
+    // webhook mode needs the options to map its endpoint, so both modes read them here: invalid configuration
+    // fails Build() in either mode, not at host start in one of them
+    private static TelegramBotOptions RunStartupChecks(IServiceProvider services)
+    {
+        StartupValidator.Run(services);
+        return services.GetRequiredService<IOptions<TelegramBotOptions>>().Value;
     }
 }

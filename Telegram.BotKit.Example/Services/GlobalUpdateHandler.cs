@@ -1,7 +1,11 @@
-﻿using Telegram.Bot;
+using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
-using Telegram.BotKit.Abstractions;
+using Telegram.BotKit.Callbacks.Abstractions;
+using Telegram.BotKit.ChosenInlineResults.Abstractions;
+using Telegram.BotKit.Commands.Abstractions;
+using Telegram.BotKit.InlineQueries.Abstractions;
+using Telegram.BotKit.Messages.Abstractions;
 
 namespace Telegram.BotKit.Example.Services;
 
@@ -9,20 +13,17 @@ namespace Telegram.BotKit.Example.Services;
 /// Intercepts and routes update events before handing them off to individual framework dispatchers.
 /// </summary>
 public class GlobalUpdateHandler(
-    IServiceProvider serviceProvider,
+    ICommandDispatcher commandDispatcher,
+    ICallbackDispatcher callbackDispatcher,
+    IMessageDispatcher messageDispatcher,
+    IInlineQueryDispatcher inlineQueryDispatcher,
+    IChosenInlineResultDispatcher chosenInlineResultDispatcher,
     ILogger<GlobalUpdateHandler> logger
     ) : IUpdateHandler
 {
     public async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Received update of type {UpdateType}.", update.Type);
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-
-        var callbackDispatcher = scope.ServiceProvider.GetRequiredService<ICallbackDispatcher>();
-        var commandDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
-        var messageDispatcher = scope.ServiceProvider.GetRequiredService<IMessageDispatcher>();
-        var inlineQueryDispatcher = scope.ServiceProvider.GetRequiredService<IInlineQueryDispatcher>();
 
         switch (update)
         {
@@ -46,6 +47,11 @@ public class GlobalUpdateHandler(
                 await inlineQueryDispatcher.DispatchAsync(inlineQuery, cancellationToken);
                 break;
 
+            // dispatch chosen inline results
+            case { ChosenInlineResult: { } chosenResult }:
+                await chosenInlineResultDispatcher.DispatchAsync(chosenResult, cancellationToken);
+                break;
+
             default:
                 break;
         }
@@ -57,3 +63,5 @@ public class GlobalUpdateHandler(
         return Task.CompletedTask;
     }
 }
+
+

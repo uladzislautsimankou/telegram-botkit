@@ -1,4 +1,4 @@
-﻿namespace Telegram.BotKit.Example.Constants;
+namespace Telegram.BotKit.Example.Constants;
 
 internal static class CallbackKeys
 {
