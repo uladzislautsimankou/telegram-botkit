@@ -16,6 +16,7 @@
     <Title>Telegram BotKit Framework</Title>
     <Description>Modern, structured .NET Framework for building Telegram Bots with Handler-based pipeline and smart parameter binding.</Description>
     <PackageId>Telegram.BotKit</PackageId>
+    <Version>0.0.0-local</Version>
     <Authors>Uladzislau Tsimankou</Authors>
 
     <RepositoryUrl>https://github.com/uladzislautsimankou/telegram-botkit</RepositoryUrl>
@@ -35,19 +36,6 @@
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="MinVer" Version="7.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
-  <PropertyGroup>
-    <MinVerTagPrefix>v</MinVerTagPrefix>
-    <MinVerMinimumMajorMinor>2.0</MinVerMinimumMajorMinor>
-    <MinVerDefaultPreReleaseIdentifiers>preview.0</MinVerDefaultPreReleaseIdentifiers>
-  </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

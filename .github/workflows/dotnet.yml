@@ -2,10 +2,9 @@ name: .NET Build & Publish
 
 on:
   push:
-    branches: [ "main", "preview" ]
+    branches: [ "main" ]
     tags: [ "v*" ]
   pull_request:
-    branches: [ "main", "preview" ]
 
 jobs:
   build:
@@ -20,6 +19,28 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
 
+    - name: Decide publish
+      id: decide
+      run: |
+        if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not a version tag like v2.0.0"
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not on main, nothing will be published"
+            exit 1
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        else
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -29,41 +50,40 @@ jobs:
       run: dotnet restore
 
     - name: Build
-      run: dotnet build --no-restore --configuration Release
+      env:
+        VERSION: ${{ steps.decide.outputs.version }}
+      run: dotnet build --no-restore --configuration Release ${VERSION:+-p:Version=$VERSION}
 
     - name: Test
       run: dotnet test Telegram.BotKit.Tests/Telegram.BotKit.Tests.csproj --no-build --configuration Release --verbosity normal
 
-    # Публикуем только теги v* и пуши в ветку preview
-    - name: Decide publish
-      id: decide
-      run: |
-        if [[ "${GITHUB_REF}" == refs/tags/v* ]] || [ "${GITHUB_REF_NAME}" = "preview" ]; then
-          echo "publish=true" >> $GITHUB_OUTPUT
-        else
-          echo "publish=false" >> $GITHUB_OUTPUT
-        fi
-
     - name: Pack
       if: steps.decide.outputs.publish == 'true'
+      env:
+        VERSION: ${{ steps.decide.outputs.version }}
       run: |
         dotnet pack Telegram.BotKit/Telegram.BotKit.csproj \
           --no-build \
           --configuration Release \
+          -p:Version="$VERSION" \
           --output ./nupkgs
 
     - name: Publish to GitHub Packages
       if: steps.decide.outputs.publish == 'true'
+      env:
+        GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         dotnet nuget push ./nupkgs/*.nupkg \
           --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json \
-          --api-key ${{ secrets.GITHUB_TOKEN }} \
+          --api-key "$GITHUB_PACKAGES_TOKEN" \
           --skip-duplicate
 
     - name: Publish to NuGet.org
       if: steps.decide.outputs.publish == 'true'
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
       run: |
         dotnet nuget push ./nupkgs/*.nupkg \
           --source https://api.nuget.org/v3/index.json \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --api-key "$NUGET_API_KEY" \
           --skip-duplicate
