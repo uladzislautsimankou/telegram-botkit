@@ -12,6 +12,7 @@ jobs:
     permissions:
       packages: write
       contents: read
+      id-token: write
 
     steps:
     - uses: actions/checkout@v4
@@ -78,12 +79,17 @@ jobs:
           --api-key "$GITHUB_PACKAGES_TOKEN" \
           --skip-duplicate
 
+    - name: NuGet login
+      if: steps.decide.outputs.publish == 'true'
+      id: nuget-login
+      uses: NuGet/login@v1
+      with:
+        user: OneAIROo
+
     - name: Publish to NuGet.org
       if: steps.decide.outputs.publish == 'true'
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
       run: |
         dotnet nuget push ./nupkgs/*.nupkg \
           --source https://api.nuget.org/v3/index.json \
-          --api-key "$NUGET_API_KEY" \
+          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
           --skip-duplicate
