@@ -8,14 +8,14 @@ Usage examples and reference for routing, handlers, middleware pipelines, and co
 
 ```json
 {
-  "TelegramBot": {
-    "Token": "YOUR_BOT_TOKEN_HERE",
-    "Mode": "Polling",
-    "AllowedUpdates": [ "Message", "CallbackQuery", "InlineQuery", "ChosenInlineResult" ],
-    "WebhookUrl": "https://your-domain.com/api/bot",
-    "SecretToken": "optional-secret-token",
-    "DropPendingUpdates": false
-  }
+    "TelegramBot": {
+        "Token": "YOUR_BOT_TOKEN_HERE",
+        "Mode": "Polling",
+        "AllowedUpdates": [ "Message", "CallbackQuery", "InlineQuery", "ChosenInlineResult" ],
+        "WebhookUrl": "https://your-domain.com/api/bot",
+        "SecretToken": "optional-secret-token",
+        "DropPendingUpdates": false
+    }
 }
 ```
 
@@ -66,6 +66,12 @@ builder.Services.AddInlineQueries(pipeline =>
 
 builder.Services.AddChosenInlineResults();
 
+builder.Services.AddWidgetQueries(pipeline =>
+{
+    pipeline.UseMiddleware<WidgetQueryFallbackAnswerMiddleware>();  // before routing: answers what was left unanswered
+    pipeline.UseRouting();
+});
+
 builder.Services.AddMessages(pipeline =>
 {
     pipeline.UseMiddleware<UserStateMiddleware>();
@@ -91,7 +97,7 @@ builder.Services.AddCommands(pipeline => pipeline.AddHandler<PingCommandHandler>
 
 Call each `AddXxx()` once: scan several assemblies with a single call.
 
-`Build()` checks the setup before the bot starts: an `IUpdateHandler` that can be created and valid parameter models of commands and callbacks.
+`Build()` checks the setup before the bot starts: an `IUpdateHandler` that can be created and valid parameter models of commands, callbacks and widget queries.
 
 ---
 
@@ -108,6 +114,7 @@ using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.WidgetQueries.Abstractions;
 
 namespace MyBot.Handlers;
 
@@ -117,6 +124,7 @@ public sealed class BotUpdateHandler(
     IMessageDispatcher messageDispatcher,
     IInlineQueryDispatcher inlineQueryDispatcher,
     IChosenInlineResultDispatcher chosenInlineResultDispatcher,
+    IWidgetQueryDispatcher widgetQueryDispatcher,
     ILogger<BotUpdateHandler> logger
 ) : IUpdateHandler
 {
@@ -142,6 +150,14 @@ public sealed class BotUpdateHandler(
 
             case { ChosenInlineResult: { } chosenResult }:
                 await chosenInlineResultDispatcher.DispatchAsync(chosenResult, cancellationToken);
+                break;
+
+            case { WidgetQuery: { } widgetQuery }:
+                await widgetQueryDispatcher.DispatchAsync(widgetQuery, cancellationToken);
+                break;
+
+            case { SharedWidgetQuery: { } sharedWidgetQuery }:
+                await widgetQueryDispatcher.DispatchAsync(sharedWidgetQuery, cancellationToken);
                 break;
 
             default:
@@ -241,6 +257,36 @@ public sealed class CallbackRoutingResultMiddleware(ITelegramBotClient bot) : IC
         // e.g. a button of a message sent before a deployment removed its handler:
         // answer it, otherwise the button keeps showing the loading indicator
         await bot.AnswerCallbackQuery(context.Query.Id, "This button is no longer active.", showAlert: true, cancellationToken: cancellationToken);
+    }
+}
+```
+
+### Widget query fallback answer (before routing)
+
+A widget that is not answered waits for 15 seconds and gets a timeout. A middleware before `UseRouting()` sees the end of the whole pipeline, so one place covers both a key nobody handles and a handler that failed:
+
+```csharp
+public sealed class WidgetQueryFallbackAnswerMiddleware(ITelegramBotClient bot, ILogger<WidgetQueryFallbackAnswerMiddleware> logger) : IWidgetQueryMiddleware
+{
+    public async ValueTask InvokeAsync(WidgetQueryContext context, NextDelegate next, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await next();
+
+            if (context.MatchedWidgetQueryMetadata is not null)
+            {
+                return;                                         // a handler ran and answered
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Widget query '{Key}' failed", context.Key);
+        }
+
+        // no handler for the key (e.g. a widget sent before a deployment removed it) or the handler failed:
+        // an empty answer ends the wait
+        await bot.AnswerWidgetQuery(widgetQueryId: context.Id, cancellationToken: cancellationToken);
     }
 }
 ```
@@ -480,6 +526,99 @@ public sealed class ArticleChosenInlineResultHandler(
 
 ---
 
+## 🧩 Widget Queries (`IWidgetQueryHandler`)
+
+An HTML widget (sent with `sendWidget`) asks the bot with `TelegramWidget.request(data)`: a button inside the widget that works like a callback button. The query arrives as `widget_query` (a tap in the original message) or `shared_widget_query` (a tap in a forwarded copy of a shared widget) and is routed by the key of its `data`, which has the format of callback data: `counter:add?by=5`, 1-64 bytes.
+
+> Needs Telegram.Bot with Bot API 10.4 (22.10.4) and a client that supports widgets (layer 233). Add `WidgetQuery` to `AllowedUpdates` (and `SharedWidgetQuery` if you send shared widgets).
+
+### 1. The widget
+
+One self-contained HTML document: inline CSS and JS, no network, at most 32 KB, and at most 4 KB after zlib (level 9). The counter of the example (`Widgets/counter.html`, about 1 KB packed) draws the number from its state and asks the bot to change it:
+
+```html
+<script>
+const W = TelegramWidget;
+
+// the chat state is written only by the bot and reaches the widget as an event
+show(parse(W.chatData));
+W.onEvent('chatDataChanged', () => show(parse(W.chatData)));
+
+// a request has to be started by a tap, so this runs in the click handler
+document.getElementById('five').addEventListener('click', () => {
+  W.request('counter:add?by=5').then(
+    (answer) => show(parse(answer.result)),       // the answer carries the new state at once
+    (error) => showError(error.code));            // NOT_ALLOWED, BUSY, RATE_LIMITED, TIMEOUT, ...
+});
+</script>
+```
+
+The HTML never changes after sending: a new layout is a new message. What changes is the state, `chat_data` (this message, never forwarded) and `public_data` (shared with forwards), up to 1024 bytes each, written only by the bot.
+
+### 2. Parameter Model and Handler
+
+```csharp
+using Telegram.Bot;
+using Telegram.BotKit.WidgetQueries.Abstractions;
+using Telegram.BotKit.WidgetQueries.Attributes;
+using Telegram.BotKit.WidgetQueries.Models;
+
+namespace MyBot.Handlers;
+
+public sealed record CounterParams
+{
+    // short names save space: the data is limited to 64 bytes
+    [WidgetParam(Name = "by")]
+    public int By { get; init; } = 1;
+}
+
+public sealed class CounterWidgetQueryHandler(ITelegramBotClient bot, CounterStore store) : IWidgetQueryHandler<CounterParams>
+{
+    public static string Key => "counter:add";
+
+    public async Task HandleAsync(CounterParams parameters, WidgetQueryContext context, CancellationToken cancellationToken)
+    {
+        // a copy and a message sent via the bot have no chat and message id
+        if (context.Chat is not { } chat || context.MessageId is not { } messageId)
+        {
+            await bot.AnswerWidgetQuery(widgetQueryId: context.Id, cancellationToken: cancellationToken);
+            return;
+        }
+
+        var state = CounterStore.ToState(store.Add(chat.Id, messageId, Math.Clamp(parameters.By, 1, 5)));
+
+        // the answer is text for the widget that asked, it never changes the widget
+        await bot.AnswerWidgetQuery(widgetQueryId: context.Id, data: state, cancellationToken: cancellationToken);
+
+        // the state of the message is changed by the bot
+        await bot.EditMessageWidgetData(chatId: chat.Id, messageId: messageId, chatData: state, cancellationToken: cancellationToken);
+    }
+}
+```
+
+> For queries without parameters use `IWidgetQueryHandler<EmptyWidgetQueryParams>`.
+
+### 3. Sending the Widget
+
+```csharp
+await bot.SendWidget(
+    chatId: chat.Id,
+    html: html,                                // read once, e.g. with WidgetHtml.Load("counter.html")
+    allowQueries: true,                        // without it Telegram refuses every request of the widget
+    chatData: CounterStore.ToState(0),         // the state the widget draws first
+    cancellationToken: cancellationToken);
+```
+
+Things to know:
+
+* The framework never answers a widget query: answer it within 15 seconds (`AnswerWidgetQuery`, text of up to 1024 bytes), otherwise the widget gets a timeout. See the fallback middleware above.
+* Telegram does not tell the bot what the widget shows: keep what you need per message (`CounterStore`), or write it to the state with `EditMessageWidgetData`. An edit that changes nothing fails with `message is not modified`; take it as done.
+* `context.IsCopy` is true for a tap in a forwarded copy: `Chat`, `MessageId` and `InlineMessageId` are null then, and only `From`, `Data` and `WidgetId` are known. `(WidgetId, From.Id)` is safe for counting "one vote per user".
+* `context.QueryType` tells what the widget sent: plain data, data signed by a TON wallet, or a notification about a transaction. All of them are routed by the key.
+* A user can send at most 5 queries per 5 seconds to the bot. The data comes from the widget: treat it as user input.
+
+---
+
 ## ✉️ Message Handlers & Conversational States
 
 ```
@@ -626,5 +765,3 @@ public sealed class EchoStickerMessageHandler(ITelegramBotClient bot) : IMessage
     }
 }
 ```
-
-

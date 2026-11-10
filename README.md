@@ -15,42 +15,48 @@ Every update first reaches **your** `IUpdateHandler`, which hands it to the disp
 graph TD
     Host[Polling or Webhook host] --> Handler{"Your IUpdateHandler"}
 
-    %% Command Flow
+%% Command Flow
     Handler -- "Message starts with /" --> CmdDisp[ICommandDispatcher]
     CmdDisp --> CmdPipe[Pipeline: Middlewares -> Routing -> Middlewares -> Execution]
     CmdPipe --> CmdHandler[ICommandHandler]
 
-    %% Callback Flow
+%% Callback Flow
     Handler -- Callback Query --> CbkDisp[ICallbackDispatcher]
     CbkDisp --> CbkPipe[Pipeline: Middlewares -> Routing -> Middlewares -> Execution]
     CbkPipe --> CbkHandler[ICallbackHandler]
 
-    %% Message Flow
+%% Message Flow
     Handler -- Regular Message --> MsgDisp[IMessageDispatcher]
     MsgDisp --> MsgPipe[Pipeline: Middlewares -> Routing -> Middlewares -> Execution]
     MsgPipe --> MsgHandler[IMessageHandler]
 
-    %% Inline Query Flow
+%% Inline Query Flow
     Handler -- Inline Query --> InlDisp[IInlineQueryDispatcher]
     InlDisp --> InlPipe[Pipeline: Middlewares -> Routing -> Middlewares -> Answer]
     InlPipe --> InlHandler["IInlineQueryHandler (all matching handlers)"]
 
-    %% Chosen Inline Result Flow
+%% Chosen Inline Result Flow
     Handler -- Chosen Inline Result --> ChoDisp[IChosenInlineResultDispatcher]
     ChoDisp --> ChoPipe[Pipeline: Middlewares -> Routing -> Middlewares -> Execution]
     ChoPipe --> ChoHandler[IChosenInlineResultHandler]
+
+%% Widget Query Flow
+    Handler -- "Widget Query / Shared Widget Query" --> WidDisp[IWidgetQueryDispatcher]
+    WidDisp --> WidPipe[Pipeline: Middlewares -> Routing -> Middlewares -> Execution]
+    WidPipe --> WidHandler[IWidgetQueryHandler]
 ```
 
 ---
 
 ## ✨ Features
 
-* **Parameter Binding:** Maps command arguments (`/remind buy milk when=18:00`) and callback data (`action?id=12`) to typed models.
+* **Parameter Binding:** Maps command arguments (`/remind buy milk when=18:00`), callback data (`action?id=12`) and widget query data to typed models.
 * **Callback Data Builder:** `CallbackButton` builds the callback data of a handler from its typed model and checks Telegram's 64-byte limit.
 * **Typo Suggestions:** An unknown command is routed with similar registered commands in `CommandContext.RouteResult`, so a middleware can answer "Did you mean ...?".
-* **Modular Pipelines:** Middleware pipelines for Commands, Callbacks, Messages, Inline Queries, and Chosen Inline Results with an explicit routing position (`UseRouting()`).
+* **Modular Pipelines:** Middleware pipelines for Commands, Callbacks, Messages, Inline Queries, Chosen Inline Results, and Widget Queries with an explicit routing position (`UseRouting()`).
 * **State Routing:** Message routing by dialog state (`RequiredState`) with fallback to global handlers.
 * **Inline Queries:** All matching handlers run (in parallel by default) and their results are merged into one answer.
+* **Widget Queries:** Handlers for taps in HTML widgets (Bot API 10.4), routed by the key of the query data. Queries from forwarded copies of shared widgets go through the same pipeline.
 * **Startup Validation:** `Build()` fails fast on a missing `IUpdateHandler`, invalid parameter models, or invalid options.
 * **Hosting Modes:** Polling and Webhook, selected with a single setting.
 
@@ -70,7 +76,7 @@ dotnet add package Telegram.BotKit
 {
   "TelegramBot": {
     "Token": "YOUR_BOT_TOKEN_HERE",
-    "AllowedUpdates": [ "Message", "CallbackQuery", "InlineQuery", "ChosenInlineResult" ],
+    "AllowedUpdates": [ "Message", "CallbackQuery", "InlineQuery", "ChosenInlineResult", "WidgetQuery" ],
     "Mode": "Polling"
   }
 }
@@ -89,6 +95,7 @@ public sealed class BotUpdateHandler(
     IMessageDispatcher messages,
     IInlineQueryDispatcher inlineQueries,
     IChosenInlineResultDispatcher chosenResults,
+    IWidgetQueryDispatcher widgetQueries,
     ILogger<BotUpdateHandler> logger) : IUpdateHandler
 {
     public Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct) => update switch
@@ -98,6 +105,8 @@ public sealed class BotUpdateHandler(
         { Message: { } message } => messages.DispatchAsync(message, ct),
         { InlineQuery: { } query } => inlineQueries.DispatchAsync(query, ct),
         { ChosenInlineResult: { } result } => chosenResults.DispatchAsync(result, ct),
+        { WidgetQuery: { } query } => widgetQueries.DispatchAsync(query, ct),
+        { SharedWidgetQuery: { } query } => widgetQueries.DispatchAsync(query, ct),
         _ => Task.CompletedTask
     };
 
@@ -123,7 +132,8 @@ builder.Services
     .AddCallbacks()
     .AddMessages()
     .AddInlineQueries()
-    .AddChosenInlineResults();
+    .AddChosenInlineResults()
+    .AddWidgetQueries();
 
 builder.Services.AddSingleton<IUpdateHandler, BotUpdateHandler>();
 
@@ -140,7 +150,7 @@ Each `AddXxx()` scans the calling assembly for handlers (pass other assemblies e
 The pipeline is: middleware before `UseRouting()` → routing → middleware after `UseRouting()` → handler. If `UseRouting()` is not called, routing runs first.
 
 * Middleware before `UseRouting()` runs for every update and wraps everything after it (error handling, loading `MessageContext.UserState`).
-* Middleware after `UseRouting()` runs **even when no handler matched**: check the routing result (`CommandContext.RouteResult`, `CallbackContext.MatchedCallbackMetadata`, ...).
+* Middleware after `UseRouting()` runs **even when no handler matched**: check the routing result (`CommandContext.RouteResult`, `CallbackContext.MatchedCallbackMetadata`, `WidgetQueryContext.MatchedWidgetQueryMetadata`, ...).
 * BotKit never replies on its own: unknown commands, binding errors, and handler exceptions are answered by your middleware.
 
 ```csharp
@@ -157,6 +167,40 @@ builder.Services.AddInlineQueries(pipeline =>
     pipeline.UseAnswer<LoggingInlineQueryAnswerMiddleware>();  // replaces the default answer step
 });
 ```
+
+---
+
+## 🧩 Widget Queries
+
+An HTML widget (`sendWidget`, Bot API 10.4) asks the bot with `TelegramWidget.request(data)`: a button inside the widget that works like a callback button. The query is routed by the key of its `data`, which has the format of callback data (`counter:add?by=5`, 1-64 bytes):
+
+```csharp
+public sealed record CounterParams
+{
+    [WidgetParam(Name = "by")]
+    public int By { get; init; } = 1;
+}
+
+public sealed class CounterWidgetQueryHandler(ITelegramBotClient bot) : IWidgetQueryHandler<CounterParams>
+{
+    public static string Key => "counter:add";
+
+    public async Task HandleAsync(CounterParams parameters, WidgetQueryContext context, CancellationToken ct)
+    {
+        var total = Add(parameters.By);
+
+        // text for the widget that asked; it never changes the widget, the state is changed by the bot
+        await bot.AnswerWidgetQuery(widgetQueryId: context.Id, data: total.ToString(), cancellationToken: ct);
+    }
+}
+```
+
+* BotKit never answers a widget query: answer it within 15 seconds, otherwise the widget gets a timeout.
+* `context.IsCopy` is true for a tap in a forwarded copy of a shared widget: such a query has no chat and no message.
+* `context.QueryType` tells what the widget sent: plain data, data signed by a TON wallet, or a transaction notification; all of them are routed by the key.
+* Needs Telegram.Bot 22.10.4 or newer (Bot API 10.4) and add `WidgetQuery` to `AllowedUpdates`.
+
+A complete widget (HTML, sending, state, a fallback answer for unknown keys) is in the [Example documentation](Telegram.BotKit.Example/README.md).
 
 ---
 

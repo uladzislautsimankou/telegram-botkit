@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        .box { text-align: center; }
+        .n { margin: 4px 0 10px; font-size: 44px; font-weight: 600; line-height: 1.1; }
+        button { margin: 0 4px; }
+        .hint { min-height: 1.3em; margin-top: 10px; font-size: 13px; color: var(--tg-theme-hint-color); }
+    </style>
+</head>
+<body>
+<div class="box">
+    <div class="n" id="n">0</div>
+    <button id="one">+1</button>
+    <button id="five">+5</button>
+    <div class="hint" id="hint"></div>
+</div>
+<script>
+    const W = TelegramWidget;
+    const $ = (id) => document.getElementById(id);
+
+    // the number out of {"n":N}; null for anything else
+    const parse = (text) => {
+        try { const n = JSON.parse(text).n; return Number.isInteger(n) ? n : null; } catch (e) { return null; }
+    };
+    const show = (n) => { if (n !== null) $('n').textContent = n; };
+
+    // the chat state is written only by the bot (editMessageWidgetData) and reaches the widget as an event
+    show(parse(W.chatData));
+    W.onEvent('chatDataChanged', () => show(parse(W.chatData)));
+
+    const ERRORS = {
+        NOT_ALLOWED: 'Open the original message to use this',
+        RATE_LIMITED: 'Not so fast',
+        TIMEOUT: 'The bot did not answer',
+    };
+
+    function add(by) {
+        $('hint').textContent = '';
+        W.HapticFeedback.impactOccurred('light');
+        // a request has to be started by a tap, so this runs in the click handler
+        W.request('counter:add?by=' + by).then(
+            (answer) => show(parse(answer.result)), // the answer carries the new state at once
+            (error) => { $('hint').textContent = error.code === 'BUSY' ? '' : (ERRORS[error.code] || 'Something went wrong'); }
+        );
+    }
+
+    $('one').addEventListener('click', () => add(1));
+    $('five').addEventListener('click', () => add(5));
+    W.ready();
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ using Telegram.BotKit.ChosenInlineResults.Abstractions;
 using Telegram.BotKit.Commands.Abstractions;
 using Telegram.BotKit.InlineQueries.Abstractions;
 using Telegram.BotKit.Messages.Abstractions;
+using Telegram.BotKit.WidgetQueries.Abstractions;
 
 namespace Telegram.BotKit.Example.Services;
 
@@ -18,6 +19,7 @@ public class GlobalUpdateHandler(
     IMessageDispatcher messageDispatcher,
     IInlineQueryDispatcher inlineQueryDispatcher,
     IChosenInlineResultDispatcher chosenInlineResultDispatcher,
+    IWidgetQueryDispatcher widgetQueryDispatcher,
     ILogger<GlobalUpdateHandler> logger
     ) : IUpdateHandler
 {
@@ -52,6 +54,16 @@ public class GlobalUpdateHandler(
                 await chosenInlineResultDispatcher.DispatchAsync(chosenResult, cancellationToken);
                 break;
 
+            // dispatch widget queries: a tap in a widget that asks the bot
+            case { WidgetQuery: { } widgetQuery }:
+                await widgetQueryDispatcher.DispatchAsync(widgetQuery, cancellationToken);
+                break;
+
+            // dispatch widget queries from forwarded copies of shared widgets
+            case { SharedWidgetQuery: { } sharedWidgetQuery }:
+                await widgetQueryDispatcher.DispatchAsync(sharedWidgetQuery, cancellationToken);
+                break;
+
             default:
                 break;
         }
@@ -63,5 +75,3 @@ public class GlobalUpdateHandler(
         return Task.CompletedTask;
     }
 }
-
-
