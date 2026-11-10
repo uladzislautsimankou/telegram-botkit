@@ -6,5 +6,6 @@ internal static class CommandKeys
     {
         public const string Ping = "ping";
         public const string Start = "start";
+        public const string Widget = "widget";
     }
 }

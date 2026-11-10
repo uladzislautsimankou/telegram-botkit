@@ -34,6 +34,16 @@ builder.Services.AddInlineQueries(pipeline =>
 
 builder.Services.AddChosenInlineResults();
 
+builder.Services.AddWidgetQueries(pipeline =>
+{
+    // before routing: sees the end of the pipeline and answers what was left unanswered
+    pipeline.UseMiddleware<WidgetQueryFallbackAnswerMiddleware>();
+    pipeline.UseRouting();
+});
+
+// in-memory state of the example widget (a real bot keeps it in a database)
+builder.Services.AddSingleton<CounterStore>();
+
 builder.Services.AddMessages(pipeline =>
 {
     pipeline.UseMiddleware<UserStateMiddleware>();
